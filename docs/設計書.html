@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2D格闘ゲーム 設計書</title>
+<style>
+:root { --bg:#fafaf7; --fg:#1f2328; --muted:#5b636b; --line:#d8d8d0; --accent:#c2410c; --code:#f0efe8; --th:#ecebe3; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#16181b; --fg:#e6e6e3; --muted:#9aa1a8; --line:#33373c; --accent:#fb923c; --code:#1f2226; --th:#23272c; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.75 system-ui,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif; }
+main { max-width:880px; margin:0 auto; padding:32px 16px 80px; }
+h1 { font-size:1.9rem; margin:0 0 .5em; padding-bottom:.4em; border-bottom:3px solid var(--accent); }
+h2 { font-size:1.35rem; margin:2.2em 0 .6em; padding-left:.6em; border-left:5px solid var(--accent); }
+h3 { font-size:1.1rem; margin:1.6em 0 .4em; color:var(--accent); }
+p, li { overflow-wrap:anywhere; }
+.tablewrap { overflow-x:auto; margin:1em 0; }
+table { border-collapse:collapse; width:100%; font-size:.93rem; }
+th, td { border:1px solid var(--line); padding:.5em .75em; text-align:left; vertical-align:top; }
+th { background:var(--th); white-space:nowrap; }
+code { background:var(--code); padding:.1em .4em; border-radius:4px; font-size:.9em; }
+pre { background:var(--code); padding:1em; border-radius:6px; overflow-x:auto; }
+pre code { padding:0; background:none; }
+.toc { background:var(--code); border:1px solid var(--line); border-radius:8px; padding:.6em 1.2em; margin:1.2em 0 2em; }
+.toc ul { margin:.3em 0; padding-left:1.2em; }
+.toc a { color:var(--fg); text-decoration:none; }
+.toc a:hover { color:var(--accent); text-decoration:underline; }
+</style>
+</head>
+<body>
+<main>
+<h1 id="2d-v01">2D格闘ゲーム 設計書(v0.1)</h1>
+<p>ブラウザ単体で動く2D格闘ゲーム。キーボードとUSBコントローラーに対応する。</p>
+<h2 id="1">1. 概要</h2>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>形式</td>
+<td>HTML + JavaScript(Canvas)、単一HTMLファイル</td>
+</tr>
+<tr>
+<td>実行環境</td>
+<td>Chrome / Edge / Firefox など主要ブラウザ(インストール不要)</td>
+</tr>
+<tr>
+<td>入力</td>
+<td>キーボード、USBコントローラー(Gamepad API)</td>
+</tr>
+<tr>
+<td>モード</td>
+<td>1P vs 2P(同一PC)、1P vs CPU</td>
+</tr>
+<tr>
+<td>キャラクター</td>
+<td>1種類(1P・2Pはパレット違い)</td>
+</tr>
+<tr>
+<td>ステージ</td>
+<td>1つ(夜の街)</td>
+</tr>
+<tr>
+<td>見た目</td>
+<td>ドット絵風(低解像度で描画して拡大表示)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_1">スコープ外(将来の拡張)</h3>
+<ul>
+<li>キャラ・ステージの追加</li>
+<li>必殺技ゲージ、投げ技、強弱の打ち分け</li>
+<li>ボタン設定画面(最初は固定配置)</li>
+<li>オンライン対戦</li>
+</ul>
+<h2 id="2">2. 画面・描画</h2>
+<ul>
+<li>ゲーム内の座標系は 384×224(判定や物理はこの単位)。キャラや画面は <code>pixelScale</code>(既定4)倍の細かさで描く。ウィンドウに収まらないときは縮小して表示し、整数倍のときだけ <code>image-rendering: pixelated</code> を使う。詳細は 11b.5。</li>
+<li>描画順は、背景、キャラ、エフェクト、UI(体力ゲージ・タイマー)。</li>
+<li>キャラは関節の位置(頭・胸・腰・手・足首)でポーズを定義し、腕と脚の曲がりをIKで計算して1ドットずつ描き出す(<code>js/data/sprites.js</code>)。配色はパレットで差し替える。画像ファイルへの差し替えも可能な構造にする。</li>
+<li>1P・2Pはパレットの置き換えで色違いにする。</li>
+</ul>
+<h2 id="3">3. ゲームループ</h2>
+<p>60fps固定。1フレームごとに次の順で処理する。</p>
+<ol>
+<li>入力の取得(キーボード、ゲームパッド)</li>
+<li>入力履歴の更新(コマンド判定用)</li>
+<li>キャラの状態更新</li>
+<li>飛び道具の更新</li>
+<li>当たり判定とダメージ処理</li>
+<li>ヒットストップ、画面揺れなどの演出更新</li>
+<li>描画</li>
+</ol>
+<h2 id="4">4. キャラクター設計</h2>
+<h3 id="41">4.1 ステータス</h3>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>値(初期案)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>体力</td>
+<td>100</td>
+</tr>
+<tr>
+<td>歩行速度</td>
+<td>1.5 px/frame</td>
+</tr>
+<tr>
+<td>ジャンプ</td>
+<td>初速 -7、重力 0.35</td>
+</tr>
+<tr>
+<td>当たり箱(立ち)</td>
+<td>幅24 × 高さ48</td>
+</tr>
+<tr>
+<td>当たり箱(しゃがみ)</td>
+<td>幅24 × 高さ32</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42">4.2 状態(ステートマシン)</h3>
+<table>
+<thead>
+<tr>
+<th>状態</th>
+<th>説明</th>
+<th>遷移先</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>idle</td>
+<td>待機</td>
+<td>walk, jump, crouch, attack, guard</td>
+</tr>
+<tr>
+<td>walk</td>
+<td>前後歩き</td>
+<td>idle, jump, attack</td>
+</tr>
+<tr>
+<td>jump</td>
+<td>ジャンプ中</td>
+<td>idle(着地), 空中攻撃</td>
+</tr>
+<tr>
+<td>crouch</td>
+<td>しゃがみ</td>
+<td>idle, しゃがみ攻撃</td>
+</tr>
+<tr>
+<td>guard</td>
+<td>ガード(後ろ入力)</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>attack</td>
+<td>攻撃(発生・持続・硬直)</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>special</td>
+<td>必殺技</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>hitstun</td>
+<td>のけぞり</td>
+<td>idle, down</td>
+</tr>
+<tr>
+<td>down</td>
+<td>ダウン</td>
+<td>getup</td>
+</tr>
+<tr>
+<td>getup</td>
+<td>起き上がり</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>ko</td>
+<td>敗北</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 id="43">4.3 通常技(フレームデータ初期案)</h3>
+<table>
+<thead>
+<tr>
+<th>技</th>
+<th>発生</th>
+<th>持続</th>
+<th>硬直</th>
+<th>ダメージ</th>
+<th>備考</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>立ちパンチ</td>
+<td>4</td>
+<td>3</td>
+<td>8</td>
+<td>5</td>
+<td>速い</td>
+</tr>
+<tr>
+<td>立ちキック</td>
+<td>7</td>
+<td>4</td>
+<td>12</td>
+<td>8</td>
+<td>リーチ長め</td>
+</tr>
+<tr>
+<td>しゃがみパンチ</td>
+<td>5</td>
+<td>3</td>
+<td>8</td>
+<td>4</td>
+<td>下段ではない</td>
+</tr>
+<tr>
+<td>しゃがみキック</td>
+<td>7</td>
+<td>4</td>
+<td>14</td>
+<td>6</td>
+<td>下段(立ちガード不可)。当たるとダウン</td>
+</tr>
+<tr>
+<td>ジャンプパンチ</td>
+<td>5</td>
+<td>6</td>
+<td>着地まで</td>
+<td>6</td>
+<td>上段(しゃがみガード不可)</td>
+</tr>
+<tr>
+<td>ジャンプキック</td>
+<td>6</td>
+<td>8</td>
+<td>着地まで</td>
+<td>8</td>
+<td>上段(しゃがみガード不可)</td>
+</tr>
+</tbody>
+</table>
+<p>発生 = 攻撃判定が出るまでのフレーム数、持続 = 判定が出ている期間、硬直 = 判定消失後に動けない期間。</p>
+<h3 id="44">4.4 必殺技</h3>
+<table>
+<thead>
+<tr>
+<th>技</th>
+<th>コマンド</th>
+<th>内容</th>
+<th>ダメージ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>波動拳風(飛び道具)</td>
+<td>↓↘→ + P</td>
+<td>前方に飛び道具を発射。同時に1発まで</td>
+<td>10</td>
+</tr>
+<tr>
+<td>昇竜拳風(対空)</td>
+<td>→↓↘ + P</td>
+<td>上昇しながら攻撃。出始め無敵あり、外すと大きな硬直</td>
+<td>14</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>コマンド受付は直近18フレーム(0.3秒)以内。</li>
+<li>方向入力は「向き」を基準に左右反転して扱う(相手が左にいる場合は←がターゲット方向)。</li>
+<li>通常技より必殺技を優先して判定する。同時に成立する場合は昇竜拳風が優先される。</li>
+</ul>
+<h3 id="45-2">4.5 実装済みの挙動(ステップ2時点)</h3>
+<ul>
+<li>技は立ち・しゃがみ(↓を押しながら)・ジャンプ中の各パンチ/キックの6種。ジャンプ中の攻撃は1回のジャンプで1回まで。</li>
+<li>攻撃判定は技の持続中だけ有効。1回の技は1回しか当たらない。</li>
+<li>立ちパンチは高い位置を打つため、しゃがんでいる相手には当たらない。</li>
+<li>ダウン・起き上がり・KO中は無敵。空中で受けた攻撃と、体力が0になる一撃は吹き飛んで倒れる。</li>
+<li>両者の攻撃が同じフレームで当たった場合は相打ちになる。</li>
+<li>画面端でのけぞった側が動けない分は、攻撃側が押し返される。</li>
+<li>体力が0になると「KO!」を表示し、少し待ってから Enter(コントローラーはStart)で再戦。</li>
+<li>H キーで、喰らい判定(青)と攻撃判定(赤)の箱を表示できる。技の調整時に使う。</li>
+<li>技の数値は <code>js/config/moves.config.js</code>、のけぞりや倒れ方は <code>js/config/physics.config.js</code> で変更する。</li>
+</ul>
+<h3 id="46-3">4.6 ガード(ステップ3で実装)</h3>
+<ul>
+<li>攻撃を受けた瞬間に、相手と反対の方向(後ろ)を押していればガードになる。ガード専用のボタンや構えはない(押していれば後ろへ歩く)。</li>
+<li>地上で、待機・歩き・しゃがみ・ガード硬直中のときだけガードできる。攻撃中、のけぞり中、空中ではできない。</li>
+<li>技の高さ(<code>level</code>)とガードの組み合わせ:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>技の高さ</th>
+<th>立ちガード</th>
+<th>しゃがみガード(↓+後ろ)</th>
+<th>該当する技</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>上段(high)</td>
+<td>防げる</td>
+<td>防げない</td>
+<td>ジャンプパンチ・ジャンプキック</td>
+</tr>
+<tr>
+<td>中段(mid)</td>
+<td>防げる</td>
+<td>防げる</td>
+<td>立ち・しゃがみのパンチ、立ちキック</td>
+</tr>
+<tr>
+<td>下段(low)</td>
+<td>防げない</td>
+<td>防げる</td>
+<td>しゃがみキック</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>ガードするとダメージは0。技ごとのガード硬直(<code>blockstun</code>)と押され方(<code>blockKnockback</code>)がかかる。ヒットストップはヒット時より2フレーム短い。画面は揺れず、青白い火花が出る。</li>
+<li>ガード中に壁際で押されて動けない分は、攻撃側が押し返される。</li>
+<li>しゃがみキックは、ガードされなければ相手をダウンさせる(<code>knockdown</code>)。</li>
+</ul>
+<h3 id="47-4">4.7 必殺技の実装内容(ステップ4で実装)</h3>
+<ul>
+<li>出し方:コマンドを入力したあと、パンチを押す。方向は相手の方を向いた向きで読む(相手が左にいるときは「前」が左)。</li>
+<li>コマンドは入力履歴(直近60フレーム)から判定する。コマンド全体は18フレーム以内、最後の方向からパンチまでは8フレーム以内。数値は <code>input.config.js</code> の <code>commands</code>。</li>
+<li>波動拳風は <code>↓↘→+パンチ</code>。キーボードで斜めを入れにくいため、<code>↓→+パンチ</code>でも出る。発生12フレーム(この時点で飛び道具が出る)、そのあと22フレーム動けない。</li>
+<li>飛び道具は秒速約190px(3.2px/フレーム)で直進し、相手に当たる・ガードされる・画面外へ出ると消える。</li>
+<li>同じプレイヤーの飛び道具は同時に1発まで。出ている間は波動拳風は出せない。</li>
+<li>相手の飛び道具とぶつかると、互いに消える(相殺)。ジャンプで飛び越えられる。</li>
+<li>中段扱いで、立ちでもしゃがみでもガードできる。ダメージ10。</li>
+<li>昇竜拳風は <code>→↓↘+パンチ</code>。発生3フレームで飛び上がり、出始めの6フレームは無敵。上昇中の10フレームに攻撃判定があり、当たるとダメージ14でダウンを奪う。</li>
+<li>外す、またはガードされると、着地後に24フレーム動けない。</li>
+<li>中段扱いで、ガードできる。</li>
+<li>必殺技は地上の待機・歩き・しゃがみ中から出せる(通常技のキャンセルは未対応)。</li>
+<li>画面下のデバッグ欄に「直近の入力」を相対テンキーで表示する。コマンドが入りにくいときの確認に使う。</li>
+<li>技の数値は <code>moves.config.js</code>(<code>fireball</code> / <code>uppercut</code>)で変更する。</li>
+</ul>
+<h2 id="5">5. 当たり判定とダメージ</h2>
+<ul>
+<li>判定は2種類。喰らい判定は常に体に付く。攻撃判定は技の持続中のみ有効。</li>
+<li>攻撃判定と喰らい判定の矩形が重なったらヒット。</li>
+<li>1回の技が同じ相手に複数回ヒットしないよう、ヒット済みフラグを管理する。</li>
+<li>ヒット時はヒットストップ(約6フレーム)、のけぞり、ノックバックを与える。</li>
+<li>ガード時はダメージ軽減(0)、ガード硬直、ノックバック小。</li>
+<li>画面端では、攻撃を受けた側が押し込まれる代わりに、攻撃側が少し後退する。</li>
+</ul>
+<h2 id="6">6. 入力設計</h2>
+<h3 id="61">6.1 論理入力</h3>
+<p>物理入力を一度「論理入力」に変換して、ゲーム側は論理入力だけを見る。</p>
+<p><code>up / down / left / right / punch / kick</code></p>
+<h3 id="62">6.2 キーボード割り当て(初期)</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>1P</th>
+<th>2P</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>移動</td>
+<td>W A S D</td>
+<td>↑ ← ↓ →</td>
+</tr>
+<tr>
+<td>パンチ</td>
+<td>F</td>
+<td>K</td>
+</tr>
+<tr>
+<td>キック</td>
+<td>G</td>
+<td>L</td>
+</tr>
+<tr>
+<td>決定/開始</td>
+<td>Enter</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-gamepad-api">6.3 コントローラー(Gamepad API)</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>割り当て(標準配置)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>移動</td>
+<td>十字キー または 左スティック</td>
+</tr>
+<tr>
+<td>パンチ</td>
+<td>左ボタン(Xbox: X / PS: □)</td>
+</tr>
+<tr>
+<td>キック</td>
+<td>下ボタン(Xbox: A / PS: ×)</td>
+</tr>
+<tr>
+<td>開始</td>
+<td>Start</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>接続した順に1P、2Pへ割り当てる。キーボードとの併用も可。</li>
+<li>ブラウザの仕様で、接続後に一度ボタンを押すまで認識されない。タイトル画面で「ボタンを押してください」と案内する。</li>
+<li>スティックは約0.5のしきい値でデジタル化する。</li>
+</ul>
+<h3 id="64">6.4 入力履歴</h3>
+<ul>
+<li>毎フレームの入力状態をリングバッファに保存する(直近60フレーム)。</li>
+<li>方向入力は8方向(テンキー表記 1〜9)に正規化して、コマンド判定に使う。</li>
+</ul>
+<h2 id="7-cpu">7. CPU</h2>
+<table>
+<thead>
+<tr>
+<th>レベル</th>
+<th>挙動</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>弱い</td>
+<td>距離に応じて近づく・離れる、時々パンチ。ガードはほぼしない</td>
+</tr>
+<tr>
+<td>普通</td>
+<td>間合い管理、対空の昇竜拳、飛び道具、ガードを行う</td>
+</tr>
+</tbody>
+</table>
+<p>CPUも論理入力を生成する形で実装し、プレイヤーと同じ操作系を通す。</p>
+<h2 id="8">8. ゲーム進行</h2>
+<h3 id="81">8.1 画面遷移</h3>
+<pre><code>タイトル → (モード選択) → ラウンド開始演出 → 対戦 → 勝敗表示 → 次ラウンド or 結果 → 再戦/タイトル
+</code></pre>
+<h3 id="82">8.2 ルール</h3>
+<ul>
+<li>2本先取</li>
+<li>制限時間60秒。時間切れは残り体力の多い方が勝ち(同じならドロー=両者1本)</li>
+<li>ラウンド開始時に「ROUND n / FIGHT!」を表示</li>
+<li>KO時にスローモーション演出</li>
+</ul>
+<h2 id="9">9. 演出・サウンド</h2>
+<ul>
+<li>ヒットストップ、画面揺れ、ヒット火花</li>
+<li>効果音はWeb Audio APIで生成する(パンチ、キック、ヒット、ガード、必殺技、KO)。音声ファイル不要。</li>
+<li>BGMは最初は無し。必要なら後から追加。</li>
+</ul>
+<h2 id="10">10. コード構成(複数ファイル)</h2>
+<h3 id="101">10.1 読み込み方式</h3>
+<p>通常の <code>&lt;script&gt;</code> タグで読み込む。<code>index.html</code> をダブルクリックするだけで動かすため、ES Modules は使わない。全ファイルは共通の名前空間 <code>Game</code> にぶら下げ、読み込み順は <code>index.html</code> に書く(動きの滑らかさは方式によらず変わらない)。</p>
+<h3 id="102">10.2 フォルダ構成</h3>
+<pre><code>ゲーム/
+├─ index.html
+├─ css/style.css
+├─ docs/設計書.md / 設計書.html
+└─ js/
+    ├─ namespace.js        名前空間 Game の定義
+    ├─ main.js             起動
+    ├─ config/             調整用の数値(ロジックに数値を直書きしない)
+    │   ├─ game.config.js      fps、ラウンド数、制限時間、体力
+    │   ├─ physics.config.js   歩行速度、ジャンプ、重力、体の大きさ
+    │   ├─ moves.config.js     技ライブラリ(全技のフレームデータ、ダメージ)
+    │   ├─ characters.config.js キャラ定義(使う技の割り当て、体の数値、上書き)
+    │   ├─ input.config.js     キー・パッド割り当て、しきい値、履歴フレーム数
+    │   ├─ ai.config.js        CPUの強さ(5b)
+    │   ├─ sound.config.js     効果音の音量(5c)
+    │   └─ display.config.js   解像度、拡大倍率、アニメ速度、デバッグ表示
+    ├─ data/               素材データ(ロジックなし)
+    │   ├─ palettes.js         1P/2Pの配色
+    │   └─ sprites.js          ドット絵(仮)
+    ├─ core/               ゲームに依存しない基盤
+    │   ├─ input.js            キーボード・パッド → 論理入力
+    │   ├─ loop.js             固定タイムステップのループ
+    │   ├─ debug.js            デバッグ表示
+    │   ├─ sceneManager.js     シーン切り替え、メニュー操作(5a)
+    │   ├─ inputHistory.js     入力履歴、コマンド判定(ステップ4)
+    │   └─ sound.js            効果音(5c)
+    ├─ game/               ゲームのルール(描画に触れない)
+    │   ├─ character.js        キャラ定義+技ライブラリ → 実際の技データ
+    │   ├─ fighter.js          状態機械、移動
+    │   ├─ physics.js          押し合い
+    │   ├─ combat.js           当たり判定、ダメージ(ステップ2)
+    │   ├─ projectile.js       飛び道具(ステップ4)
+    │   └─ ai.js               CPU(5b)
+    ├─ render/             描画(状態を読むだけ)
+    │   ├─ background.js       ステージ背景
+    │   ├─ renderer.js         キャラ描画、拡大表示
+    │   ├─ ui.js               体力ゲージ、タイマー、勝ち数、演出表示、タイトル描画(ステップ2〜5a)
+    │   └─ effects.js          火花、画面揺れ(ステップ2〜)
+    └─ scenes/             画面ごとの流れ
+        ├─ battle.js           対戦(ラウンド進行・結果メニューを含む)(5a)
+        └─ title.js            タイトル、モード選択(5a)
+</code></pre>
+<h3 id="103">10.3 依存の向き</h3>
+<p><code>config</code> / <code>data</code> ← <code>core</code> ← <code>game</code> ← <code>scenes</code> ← <code>main</code>。<code>render</code> は <code>game</code> の状態を読むだけで、<code>game</code> は <code>render</code> を知らない。ルールと見た目を分けることで、ドット絵の差し替えや演出の追加が判定に影響しない。</p>
+<h3 id="104">10.4 設定ファイルの方針</h3>
+<ul>
+<li>数値(フレーム数、速度、ダメージ、ラウンド数、制限時間など)は <code>config/</code> にだけ書き、ロジックは <code>Game.Config.xxx</code> を参照する。</li>
+<li><code>file://</code> ではJSONを読み込めないため、設定は <code>.js</code> ファイルに書く。</li>
+<li>ゲーム内部の時間は「フレーム」。人が読む項目(制限時間など)だけ「秒」で書き、起動時にフレームへ変換する。</li>
+<li>変更後はブラウザのリロードだけで反映される。</li>
+</ul>
+<h2 id="11">11. 実装ステップ</h2>
+<table>
+<thead>
+<tr>
+<th>段階</th>
+<th>内容</th>
+<th>確認ポイント</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1(完了)</td>
+<td>画面表示、キャラの歩行・ジャンプ・しゃがみ(キーボード+パッド)。2体表示、押し合い</td>
+<td>動きの気持ちよさ</td>
+</tr>
+<tr>
+<td>2(完了)</td>
+<td>通常技6種、当たり判定、ダメージ、のけぞり・ダウン、ヒットストップ、体力ゲージ、KO・再戦</td>
+<td>攻撃の手触り</td>
+</tr>
+<tr>
+<td>3(完了)</td>
+<td>ガード(立ち・しゃがみ、上段・中段・下段)、ガード硬直、足払いのダウン</td>
+<td>対戦として成立するか</td>
+</tr>
+<tr>
+<td>4(完了)</td>
+<td>必殺技2種(波動拳風・昇竜拳風)、コマンド入力、飛び道具</td>
+<td>コマンドの出しやすさ</td>
+</tr>
+<tr>
+<td>5a(完了)</td>
+<td>ラウンド制(2本先取・60秒)、タイトル、モード選択、結果メニュー</td>
+<td>一試合の流れ</td>
+</tr>
+<tr>
+<td>5b(完了)</td>
+<td>CPU(EASY・NORMAL)</td>
+<td>一人で遊べるか</td>
+</tr>
+<tr>
+<td>5c(完了)</td>
+<td>効果音</td>
+<td>手応え</td>
+</tr>
+</tbody>
+</table>
+<p>各段階で動作する版を渡し、触って調整する。</p>
+<h3 id="111-5a">11.1 ステップ5a の実装内容</h3>
+<ul>
+<li><strong>シーン</strong>:<code>title</code> → <code>battle</code> → (結果メニュー)→ <code>battle</code>(もう一度)/ <code>title</code>。切り替えは <code>Game.Core.SceneManager.go(名前, 引数)</code>。</li>
+<li><strong>タイトル</strong>:最初に「PRESS ENTER OR START」(Enter・Start・パンチ・キックのどれでも可)→ モード選択(VS 2P / VS CPU)。CPUは5bで有効になるまで選べない。↑↓で選択、Enterまたはパンチで決定、キックで戻る。</li>
+<li><strong>ラウンド進行</strong>:<code>intro</code>(ROUND n → FIGHT!、操作不可)→ <code>fight</code> → <code>ko</code>(KO! / TIME UP、前半はスローモーション)→ 次のラウンド or <code>result</code>。</li>
+<li><strong>勝敗</strong>:体力0でKO。時間切れは体力が多い方の勝ち、同じなら引き分け(両者に1勝)。2本先取で試合終了。両者が同時に先取した場合は DRAW。</li>
+<li><strong>画面表示</strong>:中央上に残り秒数(10秒以下で赤く点滅)、その下に勝ち数のしるし。</li>
+<li><strong>結果メニュー</strong>:「REMATCH」(最初から)/「TITLE」。誤操作防止のため表示から約0.75秒は受け付けない。</li>
+<li><strong>調整できる値</strong>(<code>game.config.js</code> の <code>round</code>):<code>winsToTake</code>, <code>timeLimitSec</code>, <code>introFrames</code>, <code>roundCallFrames</code>, <code>koFrames</code>, <code>koSlowFrames</code>, <code>koSlowRate</code>, <code>resultLockFrames</code>。</li>
+</ul>
+<h3 id="112-5b">11.2 ステップ5b の実装内容</h3>
+<ul>
+<li><strong>CPU</strong>(<code>game/ai.js</code>):2P側の入力を、プレイヤーと同じ形(<code>held</code> / <code>pressed</code>)で毎フレーム作る。ボタン入力以外の特別扱いはなく、キャラの動き・当たり判定・ガードはプレイヤーと同じルール。</li>
+<li><strong>必殺技</strong>:コマンドを再現せず、技名を <code>input.special</code> で直接渡す(<code>Fighter.detectSpecial</code> が受け取る)。飛び道具の同時1発の制限は同じ。</li>
+<li><strong>行動</strong>:間合い(近・中・遠)ごとに行動を選ぶ。近い=通常技/後退、中=接近・キック・波動拳、遠い=波動拳・ジャンプ・接近。ジャンプで近づく相手には昇竜拳。</li>
+<li><strong>防御</strong>:相手の攻撃や飛び道具が見えてから「反応遅れ」だけ待って、確率でガード(下段にはしゃがみガード)。</li>
+<li><strong>強さ</strong>:タイトルで VS CPU を選ぶと EASY / NORMAL を選択。数値は <code>config/ai.config.js</code>(<code>reaction</code>, <code>blockChance</code>, <code>aggression</code>, <code>attackChance</code>, <code>fireball</code>, <code>uppercut</code>, <code>jump</code>, <code>idleFrames</code>, 間合い)。</li>
+<li>CPU対戦中、2Pのキーボード・パッドは使われない。</li>
+</ul>
+<h3 id="113-5c">11.3 ステップ5c の実装内容</h3>
+<ul>
+<li><strong>方式</strong>:音声ファイルは使わず、Web Audio API で合成(<code>core/sound.js</code>)。素材の用意やライセンスの心配がなく、数値で調整できる。</li>
+<li><strong>音の種類</strong>:通常技の素振り、ヒット(弱・強)、ガード、波動拳、昇竜拳、KO、メニュー(移動・決定・戻る)、ラウンド開始(ROUND / FIGHT)、時間切れ、試合終了。BGMはなし。</li>
+<li><strong>鳴るタイミング</strong>:技の出始め(技が切り替わった瞬間を <code>battle.js</code> が見張る)、攻撃がヒット/ガードされた瞬間、ラウンドの進行、メニュー操作。</li>
+<li><strong>ブラウザの決まり</strong>:操作の前に音は出せないため、最初のキー入力・クリック・パッド操作で音を有効にする(タイトルの「ボタンを押してください」がその役目)。</li>
+<li><strong>設定</strong>(<code>config/sound.config.js</code>):<code>enabled</code>(無音)、<code>master</code>(全体音量)、<code>volumes</code>(音ごとの倍率)。ゲーム中は M キーで消音/解除。</li>
+</ul>
+<h2 id="11b-1">11b. キャラクターと技の分離(キャラ拡張 第1段階)</h2>
+<p>8キャラ化に向けて、「技」と「キャラ」を分けた。</p>
+<ul>
+<li><strong>技ライブラリ</strong>(<code>moves.config.js</code>):すべての技を名前付きで登録。必殺技には <code>command</code>(<code>input.config.js</code> のコマンド名)を持たせる。</li>
+<li><strong>キャラ定義</strong>(<code>characters.config.js</code>):キャラごとに次を書く。</li>
+<li><code>normals</code>:通常技の枠(standPunch など。ポーズ名と同じ)→ 技ライブラリの技名</li>
+<li><code>specials</code>:使える必殺技(優先順)</li>
+<li><code>body</code>:体の数値の上書き(歩く速さ、ジャンプ、体力判定の大きさなど。書かなければ共通値)</li>
+<li><code>overrides</code>:技の数値の上書き(同じ技でもこのキャラだけ威力を変える等)</li>
+<li><strong>合成</strong>(<code>game/character.js</code>):定義とライブラリを合成して、キャラごとの技データを作る。<code>Fighter</code> は <code>char.moves</code> を参照する。</li>
+<li><strong>CPU</strong>:必殺技を技名でなく種類(飛び道具・対空)で選ぶため、キャラが違っても使える。</li>
+<li>今は <code>hero</code> 1キャラのみ。新キャラは <code>characters.config.js</code> に定義を足すだけで技の組み合わせを変えられる(見た目の追加は次の段階)。</li>
+<li>第1段階では、見た目・操作・技の性能は従来と同じ(動作確認済み)。</li>
+</ul>
+<p>次の段階:ため技・投げ技の追加(下記)→ 2体目以降のキャラ追加(見た目・キャラ選択)→ 8キャラへ。</p>
+<h3 id="11b1">11b.1 技のバリエーション追加(ため技・投げ技)</h3>
+<p>技ライブラリに次の3技を追加し、<code>hero</code> に割り当てた。</p>
+<table>
+<thead>
+<tr>
+<th>技</th>
+<th>入力</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ソニックブーム風(<code>sonic</code>)</td>
+<td>後ろを約0.6秒(36フレーム)押し続け → 前+パンチ</td>
+<td>速くて小さい飛び道具(ダメージ7)。出したあとの隙は大きめ。飛び道具は同時に1発まで</td>
+</tr>
+<tr>
+<td>サマーソルト風(<code>flashkick</code>)</td>
+<td>下を約0.6秒押し続け → 上+キック</td>
+<td>後ろへ跳びながら蹴り上げる(ダメージ12・ダウンを奪う)。着地硬直あり</td>
+</tr>
+<tr>
+<td>投げ(<code>throw</code>)</td>
+<td>近づいて パンチ+キック同時押し</td>
+<td>ガード中の相手にも成立(ダメージ12・ダウン)。地上の相手のみ、距離32以内のみ</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>ため判定</strong>(<code>inputHistory.js</code>):解放の方向を入れた直前に、ためる方向が <code>chargeFrames</code> 以上続いていれば成立。ためと解放の間の途切れは <code>gap</code> フレームまで許す(キーボードでの切り替え用)。設定は <code>input.config.js</code> の <code>sonic</code> / <code>flashkick</code>。</li>
+<li><strong>↑解放のため技</strong>:↑を押した瞬間にジャンプしてしまわないよう、ため技が出せる状態のときだけ、ジャンプを最大6フレーム待ってキックを受け付ける。</li>
+<li><strong>投げ</strong>:パンチとキックのどちらかを押した瞬間にもう一方を押していれば成立。通常技の出始め(<code>throwWindowFrames</code> = 3フレーム)なら、押しのずれを許して投げに切り替える。投げられた側は専用状態(<code>thrown</code>)で動けず、投げる側が <code>hitFrame</code> で投げ飛ばす。</li>
+<li><strong>技データの新項目</strong>:<code>button</code>(出すボタン)、<code>pose</code>(使うポーズ名)、<code>throw</code>(投げ技フラグ、<code>range</code>/<code>grabDist</code>/<code>hitFrame</code>/<code>frames</code>)。</li>
+<li><strong>CPU</strong>:飛び道具・対空は「使える技から種類で選ぶ」ので新技も使う。近距離では <code>throw</code> の確率で投げを狙う(<code>ai.config.js</code>)。</li>
+<li>ため完了の表示と投げ抜けは 11b.4 で実装。</li>
+</ul>
+<h3 id="11b2-slam">11b.2 キャラ特有のコマンド投げ「叩きつけ」(<code>slam</code>)</h3>
+<ul>
+<li><strong>入力</strong>:←↙↓↘→(半回転)+パンチ。キーボード向けに ←↓→ などの省略形でも出る。コマンドごとに入力できる時間を指定でき(<code>windowFrames</code>、叩きつけは26フレーム)、長いコマンドでも出しやすくしてある。</li>
+<li><strong>動作</strong>:相手をつかむ → 持ち上げる(<code>lift</code>)→ 地面に叩きつける。ダメージ22(通常の投げは12)、ダウンを奪い、画面が揺れる。ガード中の相手にも成立。</li>
+<li><strong>距離</strong>:届く距離は52px(通常の投げは32)。相手が <code>needClose</code>(72px)より遠いときはコマンドが成立せず、他の技(波動拳など)が出る。届く距離と <code>needClose</code> の間は<strong>空振り</strong>になり、約0.5秒の大きな隙ができる。</li>
+<li><strong>通常の投げとの違い</strong>:通常の投げは「パンチ+キック同時押し」で全キャラ共通、叩きつけは「キャラ特有の必殺技」として <code>characters.config.js</code> の <code>specials</code> に割り当てる。</li>
+<li><strong>コマンドの優先</strong>:<code>←↓→</code> は波動拳の <code>↓→</code> を含むため、<code>specials</code> では叩きつけを波動拳より前に置く(相手が近いときだけ叩きつけになる)。</li>
+<li><strong>CPU</strong>:近距離で <code>throw</code> の確率でコマンド投げを狙う。</li>
+<li>技データの新項目:<code>needClose</code>、<code>lift</code>/<code>liftStart</code>、<code>whiffFrames</code>、<code>poseAt</code>(投げのポーズ切り替えフレーム)。</li>
+</ul>
+<h3 id="11b3-superfireball">11b.3 必殺技ゲージと超必殺技「スターブラスト」(<code>superfireball</code>)</h3>
+<p><strong>ゲージ</strong>(設定は <code>game.config.js</code> の <code>meter</code>)
+- 最大200(100ごとに1本、表示は画面下の左右)。本数を数字でも表示。満タンで点滅。
+- たまる量:技を当てたとき=ダメージ×2.0(攻撃側)、ガードされたとき=ダメージ×1.0(攻撃側)、攻撃を受けたとき=ダメージ×1.0(受けた側。ガード時は半分)。
+- 通常の投げ・叩きつけ・飛び道具・通常技のすべて、攻撃の判定(ヒット/ガード)を元にたまる。超必殺技自体ではたまらない(<code>noMeter</code>)。
+- ラウンドをまたいで持ち越し、試合開始で0に戻る。</p>
+<p><strong>超必殺技</strong>
+- 入力:↓↘→↓↘→+パンチ(キーボード向けに ↓→↓→ でも可)。ゲージ100(<code>cost</code>)を消費。足りないと出ない(通常の波動拳になる)。
+- 性能:出始め14フレーム無敵、大きな飛び道具(ダメージ34、ダウン)。ガードされてもダメージの2割を削る(<code>chip</code>、体力は残る)。普通の飛び道具には勝って突き進む(<code>big</code>)。
+- 発動演出:世界が40フレーム止まり、画面が暗くなって技名の帯(プレイヤー色)が流れる。設定は <code>superFlashFrames</code>。
+- CPU:ゲージがあるとき <code>super</code> の確率で狙う(<code>ai.config.js</code>)。
+- 注意:↓↘→↓↘→ の後半に昇龍拳のコマンド(→↓↘)が含まれるため、ゲージ不足で入力すると昇竜拳が出ることがある。</p>
+<p><strong>合図の表示</strong>:ゲージが1本たまると、ゲージが白く点滅して音が鳴る(約0.6秒)。満タン中は点滅し続ける。</p>
+<p><strong>キャラ別の超必殺技</strong>:技データの <code>cost</code> がゲージ消費量、<code>title</code> が演出の名前。<code>characters.config.js</code> の <code>specials</code> に割り当てるだけで、キャラごとに別の超必殺技を持たせられる。</p>
+<h2 id="12">12. リスクと対策</h2>
+<table>
+<thead>
+<tr>
+<th>リスク</th>
+<th>対策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>キーボードの同時押し制限(2人対戦)</td>
+<td>コントローラー使用を推奨。キー割り当てを離す</td>
+</tr>
+<tr>
+<td>コントローラーのボタン配置が機種で異なる</td>
+<td>標準配置を基準にし、問題があれば割り当て調整(将来、設定画面)</td>
+</tr>
+<tr>
+<td>実機での動作確認が開発側でできない</td>
+<td>利用者に試してもらい、フィードバックで調整</td>
+</tr>
+<tr>
+<td>操作の入力遅延</td>
+<td>requestAnimationFrameと固定タイムステップ、入力は毎フレーム読み取り</td>
+</tr>
+<tr>
+<td>ドット絵の品質</td>
+<td>仮絵で動かし、素材は差し替え可能にする</td>
+</tr>
+</tbody>
+</table>
+<h2 id="13">13. 未決定事項</h2>
+<ul>
+<li>キャラクターの見た目・設定(仮:道着の格闘家)</li>
+<li>ステージの雰囲気(仮:夜の街)</li>
+<li>技のフレームデータ・ダメージ値(上記は初期案、調整前提)</li>
+<li>ボタン設定画面の有無(仮:後回し)</li>
+</ul>
+<h3 id="11b4">11b.4 投げ抜けとため完了の表示</h3>
+<ul>
+<li><strong>投げ抜け</strong>:投げられた側が、つかまれてから <code>techFrames</code>(通常の投げは11フレーム、投げが決まる <code>hitFrame</code> の12フレームより前)以内にパンチ+キック同時押しをすると、ダメージなしで両者が弾かれる(14フレームののけぞり)。技データに <code>techFrames</code> が無い技(叩きつけなど)は抜けられない。同時に投げようとした場合も、先に動いた側の投げを後の側が抜ける形になる。</li>
+<li><strong>CPU</strong>:投げられると、<code>ai.config.js</code> の <code>tech</code>(確率)と <code>techDelay</code>(気づくまでの遅れ)に従って抜けを狙う(EASY=20%、NORMAL=50%)。</li>
+<li><strong>ため完了の表示</strong>:ため技のため(後ろ・下)が <code>chargeFrames</code> を超えると、頭の上に小さな印が出て点滅し、小さな合図音が鳴る。印の色はため技ごとに違う(ソニックブーム風=黄、サマーソルト風=橙)。解放の方向を入れると消える。</li>
+<li>通常の投げは、つかまれてから投げ飛ばすまでを8→12フレームに延ばし、抜けの反応が間に合うようにした。</li>
+</ul>
+<h3 id="11b5-pixelscale-4">11b.5 高解像度描画(pixelScale 4)</h3>
+<p><code>js/config/display.config.js</code> の <code>pixelScale</code> を4にし、キャラだけでなく描くものすべてを同じ細かさにそろえた(キャンバスは 384×224 の4倍 = 1536×896。座標・判定は従来の論理単位のまま)。</p>
+<table>
+<thead>
+<tr>
+<th>対象</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>キャラ</td>
+<td>1ポーズ・1コマ・1配色ごとに一度だけ作って保存。輪郭の太さは <code>max(1, round(pixelScale/2))</code> 回の縁取りで保つ。起動時に <code>Sprites.preload()</code> で先に作る</td>
+</tr>
+<tr>
+<td>背景</td>
+<td>W×pixelScale で生成。グラデーション帯・星・月・ビル(縁の光・窓)・もや・路面</td>
+</tr>
+<tr>
+<td>文字</td>
+<td>3×5の字形を2回のScale2x補間でなめらかにし、キャンバスの1ドットの境目にそろえて描く</td>
+</tr>
+<tr>
+<td>エフェクト</td>
+<td>火花は細かい1マスずつの <code>star()</code>、画面揺れは1/pixelScale 単位に丸める</td>
+</tr>
+<tr>
+<td>UI</td>
+<td>体力・ゲージは行ごとのグラデーション、三角マーカーも細かく</td>
+</tr>
+<tr>
+<td>影・飛び道具</td>
+<td>細かい1マスごとの楕円で描く</td>
+</tr>
+<tr>
+<td>表示</td>
+<td>ウィンドウに収まる倍率に縮小(小数倍も可)。整数倍のときだけドットをくっきり表示、それ以外はなめらかに縮小</td>
+</tr>
+</tbody>
+</table>
+<p>測定(ヘッドレス): 60fps、描画の平均約2ms。ps 2/3/4/6 の比較画像で見た目を確認した。pixelScale を変えるだけで切り替わるが、6以上は描画準備が重くなる。</p>
+</main>
+<script>
+document.querySelectorAll('table').forEach(t => {
+  const w = document.createElement('div'); w.className = 'tablewrap';
+  t.parentNode.insertBefore(w, t); w.appendChild(t);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2D格闘ゲーム 設計書</title>
+<style>
+:root { --bg:#fafaf7; --fg:#1f2328; --muted:#5b636b; --line:#d8d8d0; --accent:#c2410c; --code:#f0efe8; --th:#ecebe3; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#16181b; --fg:#e6e6e3; --muted:#9aa1a8; --line:#33373c; --accent:#fb923c; --code:#1f2226; --th:#23272c; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.75 system-ui,"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif; }
+main { max-width:880px; margin:0 auto; padding:32px 16px 80px; }
+h1 { font-size:1.9rem; margin:0 0 .5em; padding-bottom:.4em; border-bottom:3px solid var(--accent); }
+h2 { font-size:1.35rem; margin:2.2em 0 .6em; padding-left:.6em; border-left:5px solid var(--accent); }
+h3 { font-size:1.1rem; margin:1.6em 0 .4em; color:var(--accent); }
+p, li { overflow-wrap:anywhere; }
+.tablewrap { overflow-x:auto; margin:1em 0; }
+table { border-collapse:collapse; width:100%; font-size:.93rem; }
+th, td { border:1px solid var(--line); padding:.5em .75em; text-align:left; vertical-align:top; }
+th { background:var(--th); white-space:nowrap; }
+code { background:var(--code); padding:.1em .4em; border-radius:4px; font-size:.9em; }
+pre { background:var(--code); padding:1em; border-radius:6px; overflow-x:auto; }
+pre code { padding:0; background:none; }
+.toc { background:var(--code); border:1px solid var(--line); border-radius:8px; padding:.6em 1.2em; margin:1.2em 0 2em; }
+.toc ul { margin:.3em 0; padding-left:1.2em; }
+.toc a { color:var(--fg); text-decoration:none; }
+.toc a:hover { color:var(--accent); text-decoration:underline; }
+</style>
+</head>
+<body>
+<main>
+<h1 id="2d-v01">2D格闘ゲーム 設計書(v0.1)</h1>
+<p>ブラウザ単体で動く2D格闘ゲーム。キーボードとUSBコントローラーに対応する。</p>
+<h2 id="1">1. 概要</h2>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>形式</td>
+<td>HTML + JavaScript(Canvas)、単一HTMLファイル</td>
+</tr>
+<tr>
+<td>実行環境</td>
+<td>Chrome / Edge / Firefox など主要ブラウザ(インストール不要)</td>
+</tr>
+<tr>
+<td>入力</td>
+<td>キーボード、USBコントローラー(Gamepad API)</td>
+</tr>
+<tr>
+<td>モード</td>
+<td>1P vs 2P(同一PC)、1P vs CPU</td>
+</tr>
+<tr>
+<td>キャラクター</td>
+<td>1種類(1P・2Pはパレット違い)</td>
+</tr>
+<tr>
+<td>ステージ</td>
+<td>1つ(夜の街)</td>
+</tr>
+<tr>
+<td>見た目</td>
+<td>ドット絵風(低解像度で描画して拡大表示)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_1">スコープ外(将来の拡張)</h3>
+<ul>
+<li>キャラ・ステージの追加</li>
+<li>必殺技ゲージ、投げ技、強弱の打ち分け</li>
+<li>ボタン設定画面(最初は固定配置)</li>
+<li>オンライン対戦</li>
+</ul>
+<h2 id="2">2. 画面・描画</h2>
+<ul>
+<li>ゲーム内の座標系は 384×224(判定や物理はこの単位)。キャラや画面は <code>pixelScale</code>(既定2)倍の細かさで描き、整数倍で拡大表示して <code>image-rendering: pixelated</code> でドットをぼかさない。</li>
+<li>描画順は、背景、キャラ、エフェクト、UI(体力ゲージ・タイマー)。</li>
+<li>キャラは関節の位置(頭・胸・腰・手・足首)でポーズを定義し、腕と脚の曲がりをIKで計算して1ドットずつ描き出す(<code>js/data/sprites.js</code>)。配色はパレットで差し替える。画像ファイルへの差し替えも可能な構造にする。</li>
+<li>1P・2Pはパレットの置き換えで色違いにする。</li>
+</ul>
+<h2 id="3">3. ゲームループ</h2>
+<p>60fps固定。1フレームごとに次の順で処理する。</p>
+<ol>
+<li>入力の取得(キーボード、ゲームパッド)</li>
+<li>入力履歴の更新(コマンド判定用)</li>
+<li>キャラの状態更新</li>
+<li>飛び道具の更新</li>
+<li>当たり判定とダメージ処理</li>
+<li>ヒットストップ、画面揺れなどの演出更新</li>
+<li>描画</li>
+</ol>
+<h2 id="4">4. キャラクター設計</h2>
+<h3 id="41">4.1 ステータス</h3>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>値(初期案)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>体力</td>
+<td>100</td>
+</tr>
+<tr>
+<td>歩行速度</td>
+<td>1.5 px/frame</td>
+</tr>
+<tr>
+<td>ジャンプ</td>
+<td>初速 -7、重力 0.35</td>
+</tr>
+<tr>
+<td>当たり箱(立ち)</td>
+<td>幅24 × 高さ48</td>
+</tr>
+<tr>
+<td>当たり箱(しゃがみ)</td>
+<td>幅24 × 高さ32</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42">4.2 状態(ステートマシン)</h3>
+<table>
+<thead>
+<tr>
+<th>状態</th>
+<th>説明</th>
+<th>遷移先</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>idle</td>
+<td>待機</td>
+<td>walk, jump, crouch, attack, guard</td>
+</tr>
+<tr>
+<td>walk</td>
+<td>前後歩き</td>
+<td>idle, jump, attack</td>
+</tr>
+<tr>
+<td>jump</td>
+<td>ジャンプ中</td>
+<td>idle(着地), 空中攻撃</td>
+</tr>
+<tr>
+<td>crouch</td>
+<td>しゃがみ</td>
+<td>idle, しゃがみ攻撃</td>
+</tr>
+<tr>
+<td>guard</td>
+<td>ガード(後ろ入力)</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>attack</td>
+<td>攻撃(発生・持続・硬直)</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>special</td>
+<td>必殺技</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>hitstun</td>
+<td>のけぞり</td>
+<td>idle, down</td>
+</tr>
+<tr>
+<td>down</td>
+<td>ダウン</td>
+<td>getup</td>
+</tr>
+<tr>
+<td>getup</td>
+<td>起き上がり</td>
+<td>idle</td>
+</tr>
+<tr>
+<td>ko</td>
+<td>敗北</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 id="43">4.3 通常技(フレームデータ初期案)</h3>
+<table>
+<thead>
+<tr>
+<th>技</th>
+<th>発生</th>
+<th>持続</th>
+<th>硬直</th>
+<th>ダメージ</th>
+<th>備考</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>立ちパンチ</td>
+<td>4</td>
+<td>3</td>
+<td>8</td>
+<td>5</td>
+<td>速い</td>
+</tr>
+<tr>
+<td>立ちキック</td>
+<td>7</td>
+<td>4</td>
+<td>12</td>
+<td>8</td>
+<td>リーチ長め</td>
+</tr>
+<tr>
+<td>しゃがみパンチ</td>
+<td>5</td>
+<td>3</td>
+<td>8</td>
+<td>4</td>
+<td>下段ではない</td>
+</tr>
+<tr>
+<td>しゃがみキック</td>
+<td>7</td>
+<td>4</td>
+<td>14</td>
+<td>6</td>
+<td>下段(立ちガード不可)</td>
+</tr>
+<tr>
+<td>ジャンプパンチ</td>
+<td>5</td>
+<td>6</td>
+<td>着地まで</td>
+<td>6</td>
+<td>中段(しゃがみガード不可)</td>
+</tr>
+<tr>
+<td>ジャンプキック</td>
+<td>6</td>
+<td>8</td>
+<td>着地まで</td>
+<td>8</td>
+<td>中段</td>
+</tr>
+</tbody>
+</table>
+<p>発生 = 攻撃判定が出るまでのフレーム数、持続 = 判定が出ている期間、硬直 = 判定消失後に動けない期間。</p>
+<h3 id="44">4.4 必殺技</h3>
+<table>
+<thead>
+<tr>
+<th>技</th>
+<th>コマンド</th>
+<th>内容</th>
+<th>ダメージ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>波動拳風(飛び道具)</td>
+<td>↓↘→ + P</td>
+<td>前方に飛び道具を発射。同時に1発まで</td>
+<td>10</td>
+</tr>
+<tr>
+<td>昇竜拳風(対空)</td>
+<td>→↓↘ + P</td>
+<td>上昇しながら攻撃。出始め無敵あり、外すと大きな硬直</td>
+<td>14</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>コマンド受付は直近18フレーム(0.3秒)以内。</li>
+<li>方向入力は「向き」を基準に左右反転して扱う(相手が左にいる場合は←がターゲット方向)。</li>
+<li>通常技より必殺技を優先して判定する。</li>
+</ul>
+<h3 id="45-2">4.5 実装済みの挙動(ステップ2時点)</h3>
+<ul>
+<li>技は立ち・しゃがみ(↓を押しながら)・ジャンプ中の各パンチ/キックの6種。ジャンプ中の攻撃は1回のジャンプで1回まで。</li>
+<li>攻撃判定は技の持続中だけ有効。1回の技は1回しか当たらない。</li>
+<li>立ちパンチは高い位置を打つため、しゃがんでいる相手には当たらない。</li>
+<li>ダウン・起き上がり・KO中は無敵。空中で受けた攻撃と、体力が0になる一撃は吹き飛んで倒れる。</li>
+<li>両者の攻撃が同じフレームで当たった場合は相打ちになる。</li>
+<li>画面端でのけぞった側が動けない分は、攻撃側が押し返される。</li>
+<li>体力が0になると「KO!」を表示し、少し待ってから Enter(コントローラーはStart)で再戦。</li>
+<li>H キーで、喰らい判定(青)と攻撃判定(赤)の箱を表示できる。技の調整時に使う。</li>
+<li>技の数値は <code>js/config/moves.config.js</code>、のけぞりや倒れ方は <code>js/config/physics.config.js</code> で変更する。</li>
+</ul>
+<h2 id="5">5. 当たり判定とダメージ</h2>
+<ul>
+<li>判定は2種類。喰らい判定は常に体に付く。攻撃判定は技の持続中のみ有効。</li>
+<li>攻撃判定と喰らい判定の矩形が重なったらヒット。</li>
+<li>1回の技が同じ相手に複数回ヒットしないよう、ヒット済みフラグを管理する。</li>
+<li>ヒット時はヒットストップ(約6フレーム)、のけぞり、ノックバックを与える。</li>
+<li>ガード時はダメージ軽減(0)、ガード硬直、ノックバック小。</li>
+<li>画面端では、攻撃を受けた側が押し込まれる代わりに、攻撃側が少し後退する。</li>
+</ul>
+<h2 id="6">6. 入力設計</h2>
+<h3 id="61">6.1 論理入力</h3>
+<p>物理入力を一度「論理入力」に変換して、ゲーム側は論理入力だけを見る。</p>
+<p><code>up / down / left / right / punch / kick</code></p>
+<h3 id="62">6.2 キーボード割り当て(初期)</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>1P</th>
+<th>2P</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>移動</td>
+<td>W A S D</td>
+<td>↑ ← ↓ →</td>
+</tr>
+<tr>
+<td>パンチ</td>
+<td>F</td>
+<td>K</td>
+</tr>
+<tr>
+<td>キック</td>
+<td>G</td>
+<td>L</td>
+</tr>
+<tr>
+<td>決定/開始</td>
+<td>Enter</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-gamepad-api">6.3 コントローラー(Gamepad API)</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>割り当て(標準配置)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>移動</td>
+<td>十字キー または 左スティック</td>
+</tr>
+<tr>
+<td>パンチ</td>
+<td>左ボタン(Xbox: X / PS: □)</td>
+</tr>
+<tr>
+<td>キック</td>
+<td>下ボタン(Xbox: A / PS: ×)</td>
+</tr>
+<tr>
+<td>開始</td>
+<td>Start</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>接続した順に1P、2Pへ割り当てる。キーボードとの併用も可。</li>
+<li>ブラウザの仕様で、接続後に一度ボタンを押すまで認識されない。タイトル画面で「ボタンを押してください」と案内する。</li>
+<li>スティックは約0.5のしきい値でデジタル化する。</li>
+</ul>
+<h3 id="64">6.4 入力履歴</h3>
+<ul>
+<li>毎フレームの入力状態をリングバッファに保存する(直近60フレーム)。</li>
+<li>方向入力は8方向(テンキー表記 1〜9)に正規化して、コマンド判定に使う。</li>
+</ul>
+<h2 id="7-cpu">7. CPU</h2>
+<table>
+<thead>
+<tr>
+<th>レベル</th>
+<th>挙動</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>弱い</td>
+<td>距離に応じて近づく・離れる、時々パンチ。ガードはほぼしない</td>
+</tr>
+<tr>
+<td>普通</td>
+<td>間合い管理、対空の昇竜拳、飛び道具、ガードを行う</td>
+</tr>
+</tbody>
+</table>
+<p>CPUも論理入力を生成する形で実装し、プレイヤーと同じ操作系を通す。</p>
+<h2 id="8">8. ゲーム進行</h2>
+<h3 id="81">8.1 画面遷移</h3>
+<pre><code>タイトル → (モード選択) → ラウンド開始演出 → 対戦 → 勝敗表示 → 次ラウンド or 結果 → 再戦/タイトル
+</code></pre>
+<h3 id="82">8.2 ルール</h3>
+<ul>
+<li>2本先取</li>
+<li>制限時間60秒。時間切れは残り体力の多い方が勝ち(同じならドロー=両者1本)</li>
+<li>ラウンド開始時に「ROUND n / FIGHT!」を表示</li>
+<li>KO時にスローモーション演出</li>
+</ul>
+<h2 id="9">9. 演出・サウンド</h2>
+<ul>
+<li>ヒットストップ、画面揺れ、ヒット火花</li>
+<li>効果音はWeb Audio APIで生成する(パンチ、キック、ヒット、ガード、必殺技、KO)。音声ファイル不要。</li>
+<li>BGMは最初は無し。必要なら後から追加。</li>
+</ul>
+<h2 id="10">10. コード構成(複数ファイル)</h2>
+<h3 id="101">10.1 読み込み方式</h3>
+<p>通常の <code>&lt;script&gt;</code> タグで読み込む。<code>index.html</code> をダブルクリックするだけで動かすため、ES Modules は使わない。全ファイルは共通の名前空間 <code>Game</code> にぶら下げ、読み込み順は <code>index.html</code> に書く(動きの滑らかさは方式によらず変わらない)。</p>
+<h3 id="102">10.2 フォルダ構成</h3>
+<pre><code>ゲーム/
+├─ index.html
+├─ css/style.css
+├─ docs/設計書.md / 設計書.html
+└─ js/
+    ├─ namespace.js        名前空間 Game の定義
+    ├─ main.js             起動
+    ├─ config/             調整用の数値(ロジックに数値を直書きしない)
+    │   ├─ game.config.js      fps、ラウンド数、制限時間、体力
+    │   ├─ physics.config.js   歩行速度、ジャンプ、重力、体の大きさ
+    │   ├─ moves.config.js     技のフレームデータ、ダメージ(ステップ2〜)
+    │   ├─ input.config.js     キー・パッド割り当て、しきい値、履歴フレーム数
+    │   ├─ ai.config.js        CPUの強さ(ステップ5)
+    │   └─ display.config.js   解像度、拡大倍率、アニメ速度、デバッグ表示
+    ├─ data/               素材データ(ロジックなし)
+    │   ├─ palettes.js         1P/2Pの配色
+    │   └─ sprites.js          ドット絵(仮)
+    ├─ core/               ゲームに依存しない基盤
+    │   ├─ input.js            キーボード・パッド → 論理入力
+    │   ├─ loop.js             固定タイムステップのループ
+    │   ├─ debug.js            デバッグ表示
+    │   ├─ inputHistory.js     入力履歴、コマンド判定(ステップ4)
+    │   └─ sound.js            効果音(ステップ5)
+    ├─ game/               ゲームのルール(描画に触れない)
+    │   ├─ fighter.js          状態機械、移動
+    │   ├─ physics.js          押し合い
+    │   ├─ combat.js           当たり判定、ダメージ(ステップ2)
+    │   ├─ projectile.js       飛び道具(ステップ4)
+    │   └─ ai.js               CPU(ステップ5)
+    ├─ render/             描画(状態を読むだけ)
+    │   ├─ background.js       ステージ背景
+    │   ├─ renderer.js         キャラ描画、拡大表示
+    │   ├─ ui.js               体力ゲージ、タイマー(ステップ2〜)
+    │   └─ effects.js          火花、画面揺れ(ステップ2〜)
+    └─ scenes/             画面ごとの流れ
+        ├─ battle.js           対戦
+        ├─ title.js            タイトル(ステップ5)
+        └─ result.js           結果(ステップ5)
+</code></pre>
+<h3 id="103">10.3 依存の向き</h3>
+<p><code>config</code> / <code>data</code> ← <code>core</code> ← <code>game</code> ← <code>scenes</code> ← <code>main</code>。<code>render</code> は <code>game</code> の状態を読むだけで、<code>game</code> は <code>render</code> を知らない。ルールと見た目を分けることで、ドット絵の差し替えや演出の追加が判定に影響しない。</p>
+<h3 id="104">10.4 設定ファイルの方針</h3>
+<ul>
+<li>数値(フレーム数、速度、ダメージ、ラウンド数、制限時間など)は <code>config/</code> にだけ書き、ロジックは <code>Game.Config.xxx</code> を参照する。</li>
+<li><code>file://</code> ではJSONを読み込めないため、設定は <code>.js</code> ファイルに書く。</li>
+<li>ゲーム内部の時間は「フレーム」。人が読む項目(制限時間など)だけ「秒」で書き、起動時にフレームへ変換する。</li>
+<li>変更後はブラウザのリロードだけで反映される。</li>
+</ul>
+<h2 id="11">11. 実装ステップ</h2>
+<table>
+<thead>
+<tr>
+<th>段階</th>
+<th>内容</th>
+<th>確認ポイント</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1(完了)</td>
+<td>画面表示、キャラの歩行・ジャンプ・しゃがみ(キーボード+パッド)。2体表示、押し合い</td>
+<td>動きの気持ちよさ</td>
+</tr>
+<tr>
+<td>2(完了)</td>
+<td>通常技6種、当たり判定、ダメージ、のけぞり・ダウン、ヒットストップ、体力ゲージ、KO・再戦</td>
+<td>攻撃の手触り</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2体目、ガード、のけぞり、ダウン</td>
+<td>対戦として成立するか</td>
+</tr>
+<tr>
+<td>4</td>
+<td>必殺技(コマンド入力、飛び道具、昇竜)</td>
+<td>コマンドの出しやすさ</td>
+</tr>
+<tr>
+<td>5</td>
+<td>ラウンド制、タイトル、CPU、効果音</td>
+<td>ゲームとして遊べるか</td>
+</tr>
+</tbody>
+</table>
+<p>各段階で動作する版を渡し、触って調整する。</p>
+<h2 id="12">12. リスクと対策</h2>
+<table>
+<thead>
+<tr>
+<th>リスク</th>
+<th>対策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>キーボードの同時押し制限(2人対戦)</td>
+<td>コントローラー使用を推奨。キー割り当てを離す</td>
+</tr>
+<tr>
+<td>コントローラーのボタン配置が機種で異なる</td>
+<td>標準配置を基準にし、問題があれば割り当て調整(将来、設定画面)</td>
+</tr>
+<tr>
+<td>実機での動作確認が開発側でできない</td>
+<td>利用者に試してもらい、フィードバックで調整</td>
+</tr>
+<tr>
+<td>操作の入力遅延</td>
+<td>requestAnimationFrameと固定タイムステップ、入力は毎フレーム読み取り</td>
+</tr>
+<tr>
+<td>ドット絵の品質</td>
+<td>仮絵で動かし、素材は差し替え可能にする</td>
+</tr>
+</tbody>
+</table>
+<h2 id="13">13. 未決定事項</h2>
+<ul>
+<li>キャラクターの見た目・設定(仮:道着の格闘家)</li>
+<li>ステージの雰囲気(仮:夜の街)</li>
+<li>技のフレームデータ・ダメージ値(上記は初期案、調整前提)</li>
+<li>ボタン設定画面の有無(仮:後回し)</li>
+</ul>
+</main>
+<script>
+document.querySelectorAll('table').forEach(t => {
+  const w = document.createElement('div'); w.className = 'tablewrap';
+  t.parentNode.insertBefore(w, t); w.appendChild(t);
+});
+</script>
+</body>
+</html>
