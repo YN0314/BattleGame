@@ -112,7 +112,7 @@
       }
 
       // 受け身の行動:動けない間は何もしない(考えるのは自由に動けるときだけ)
-      const free = me.state === 'idle' || me.state === 'walk' || me.state === 'crouch';
+      const free = me.state === 'idle' || me.state === 'walk' || me.state === 'dash' || me.state === 'crouch';
 
       // ガード
       const th = free || me.state === 'blockstun' ? this.threat(me, opp) : null;

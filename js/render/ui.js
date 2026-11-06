@@ -190,6 +190,13 @@
     meterBar(ctx, f[0], false);
     meterBar(ctx, f[1], true);
 
+    if (scene.combo) {                     // コンボ表示(攻撃した側の画面端に出す)
+      const c = scene.combo, left = c.owner === 0;
+      const x = left ? 12 : D.width - 12, al = left ? 'left' : 'right';
+      Font.draw(ctx, c.hits + ' HITS', x, 62, 3, '#ffe56a', al, '#7a1c10');
+      Font.draw(ctx, 'DMG ' + c.damage, x, 84, 1, '#ffffff', al, '#05050a');
+    }
+
     if (scene.flash) superFlash(ctx, scene);
 
     if (scene.phase === 'intro') {
@@ -217,20 +224,42 @@
     }
   }
 
-  // タイトル画面
+  // ロゴ:押し出し(影を重ねる)+ 光の帯が横切る
+  function logo(ctx, text, cx, y, scale, face, edge, deep, t, phase) {
+    const Font = Game.Render.Font;
+    for (let k = 4; k >= 1; k--) Font.draw(ctx, text, cx, y + k, scale, deep, 'center', null);        // 厚み
+    Font.draw(ctx, text, cx, y, scale, face, 'center', edge);
+    // 光の帯(ロゴの上だけ明るくする)
+    const w = Font.measure(text, scale), left = cx - w / 2;
+    const sx = left - 30 + ((t * 2 + phase) % (w + 120));
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(sx, y - 4); ctx.lineTo(sx + 12, y - 4); ctx.lineTo(sx - 6, y + scale * 5 + 6); ctx.lineTo(sx - 18, y + scale * 5 + 6);
+    ctx.clip();
+    Font.draw(ctx, text, cx, y, scale, '#ffffff', 'center', null);
+    ctx.restore();
+  }
+
+  // タイトル画面(ストリートファイター2風:ロゴ → PRESS START → メニュー)
   function drawTitle(ctx, scene) {
     const D = Game.Config.display;
     const Font = Game.Render.Font;
-    const cx = D.width / 2;
+    const cx = D.width / 2, t = scene.frame || 0;
 
-    Font.draw(ctx, 'NIGHT', cx, 22, 8, '#ffe56a', 'center', '#7a1c10');
-    Font.draw(ctx, 'FIGHTER', cx, 68, 8, '#ffffff', 'center', '#1c2a6a');
+    // 上は暗くしてロゴを読みやすく、下は文字のために少し暗くする
+    const g = ctx.createLinearGradient(0, 0, 0, D.height);
+    g.addColorStop(0, 'rgba(5,6,20,0.78)'); g.addColorStop(0.5, 'rgba(5,6,20,0.25)'); g.addColorStop(1, 'rgba(5,6,20,0.6)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, D.width, D.height);
+
+    logo(ctx, 'NIGHT', cx, 18, 8, '#ffe56a', '#7a1c10', '#b0361c', t, 0);
+    logo(ctx, 'FIGHTER', cx, 64, 8, '#ffffff', '#1c2a6a', '#3a56b8', t, 60);
 
     if (scene.stage === 'press') {
-      if (Math.floor(scene.frame / 30) % 2 === 0) {
-        Font.draw(ctx, 'PRESS ENTER OR START', cx, 140, 1, '#e6e6f2', 'center', '#05050a');
+      if (Math.floor(t / 30) % 2 === 0) {
+        Font.draw(ctx, 'PRESS START BUTTON', cx, 144, 2, '#ffffff', 'center', '#05050a');
       }
-      Font.draw(ctx, 'PUNCH OR KICK BUTTON ALSO WORKS', cx, 152, 1, '#9a9ab4', 'center', '#05050a');
+      Font.draw(ctx, 'ENTER OR ANY BUTTON', cx, 166, 1, '#9a9ab4', 'center', '#05050a');
+      Font.draw(ctx, 'PROTOTYPE VERSION', cx, D.height - 12, 1, '#6a6a88', 'center', '#05050a');
     } else if (scene.stage === 'level') {
       Font.draw(ctx, 'CPU LEVEL', cx, 122, 1, '#9a9ab4', 'center', '#05050a');
       menu(ctx, scene.levelItems().map(function (it) { return it.label; }), null, scene.levelIndex, 138, 2);
@@ -238,7 +267,7 @@
       const items = scene.items();
       menu(ctx, items.map(function (it) { return it.label; }),
         items.map(function (it) { return it.enabled; }), scene.index, 126, 2);
-      if (!items[1].enabled) {
+      if (!items[0].enabled) {
         Font.draw(ctx, 'CPU SOON', cx, 170, 1, '#6a6a80', 'center', '#05050a');
       }
     }

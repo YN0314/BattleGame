@@ -3,6 +3,13 @@ Game.Config.physics = {
   walkSpeed: 1.5,          // 前進の速さ(px/フレーム)
   backwalkRatio: 0.8,      // 後退の速さ(前進に対する割合)
 
+  dashTapFrames: 14,       // ダッシュ・バックステップ:同じ方向を2回押す間の許される長さ(フレーム)
+  dashSpeed: 3.4,          // ダッシュの速さ(押し続けるあいだ走り続ける)
+  dashMinFrames: 8,        // ダッシュの最短の長さ(軽く2回押しただけでも、これだけは走る)
+  backstepFrames: 18,      // バックステップの長さ(動き出したら止まれない)
+  backstepSpeed: 3.6,      // バックステップの初速(だんだん遅くなる)
+  backstepHop: 7,          // バックステップで少し浮く高さ
+
   jumpVelocity: -7,        // ジャンプの初速(上向きが負)
   gravity: 0.35,           // 重力(px/フレーム²)
   jumpSpeed: 1.8,          // ジャンプ中の横移動の速さ(離陸時に決まる)

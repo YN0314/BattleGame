@@ -68,7 +68,7 @@
     list.forEach(function (p) {
       fighters.forEach(function (f) {
         if (p.dead || f === p.owner || !f.vulnerable) return;
-        const pt = C.intersect(p.rect(), C.hurtRect(f));
+        const pt = C.hitPoint(p.rect(), f);
         if (!pt) return;
         p.dead = true;
         const blocked = f.takeHit(p.def, p.dir) === 'block';

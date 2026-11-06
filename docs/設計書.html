@@ -769,6 +769,162 @@ pre code { padding:0; background:none; }
 </tbody>
 </table>
 <p>測定(ヘッドレス): 60fps、描画の平均約2ms。ps 2/3/4/6 の比較画像で見た目を確認した。pixelScale を変えるだけで切り替わるが、6以上は描画準備が重くなる。</p>
+<h3 id="11b6-nakagawa">11b.6 写真をもとにしたキャラ「NAKAGAWA」とキャラ選択</h3>
+<ul>
+<li>写真(ワイシャツ・濃紺のネクタイ・黒いスラックス・黒いベルト・眼鏡・短い黒髪)から、見た目の特徴だけを取り出してドット絵風に描いた。写真そのものは使っていない。</li>
+<li>見た目の種類は <code>Game.Data.Looks</code>(<code>data/palettes.js</code>)に置く。<code>style</code> が体の描き方(<code>karate</code> = 道着、<code>shirt</code> = ワイシャツ姿)、<code>palettes</code> が1P色・2P色。<code>characters.config.js</code> の <code>sprite</code> で選ぶ。</li>
+<li><code>sprites.js</code> に shirt 用のパーツ(スラックスの脚と革靴、長袖と袖口、ベルトとバックル、襟とネクタイ、眼鏡と短髪の頭)を追加。ポーズ(関節位置)はヒーローと共通。画像はキャラ・ポーズ・コマ・配色ごとに1回だけ作ってキャッシュする。</li>
+<li>技は今のところヒーローと同じ(キャラ固有の技は今後)。</li>
+<li>キャラ選択はタイトル画面の中に追加した(<code>stage: 'chars'</code>)。VS 2P は1P→2Pの順に選び、VS CPU は1Pだけ選ぶ(CPUは別のキャラになる)。上下キーで選び、パンチ(またはEnter)で決定、キックで戻る。</li>
+</ul>
+<h3 id="11b7">11b.7 判定の精度(コマごとの喰らい判定・キャンセル・コンボ補正・気絶)</h3>
+<p>設定は <code>js/config/combat.config.js</code>。</p>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>コマごとの喰らい判定</td>
+<td>ポーズの関節位置から、頭・胴・脚2本・腕2本の箱を毎フレーム作る(<code>Combat.hurtRects</code>)。しゃがむと高い技をかわせ、技を出した腕や脚は伸びた分だけ食らう。<code>frameHurtboxes: false</code> で従来の「体全体で1つの箱」に戻せる。Hキーで箱を表示して確認できる</td>
+</tr>
+<tr>
+<td>攻撃判定の切り替え</td>
+<td>技の <code>hitbox</code> に <code>[{ t, x, y, w, h }, ...]</code> と書くと、判定が出てから t フレーム目以降は箱が切り替わる(例:立ちキックは3フレーム目から遠くまで届く)</td>
+</tr>
+<tr>
+<td>キャンセル</td>
+<td>技に <code>cancel: 'special'</code>(必殺技・超必殺技へ)または <code>'super'</code>(超必殺技のみ)を書くと、当てた(ガードされた)あとの硬直を、必殺技の入力で打ち切って出せる。空振りではキャンセルできない。通常技は special、飛び道具・昇竜などの必殺技は super。コマンド投げへはキャンセルできない</td>
+</tr>
+<tr>
+<td>コンボ補正</td>
+<td>続けて当たるほどダメージが減る(<code>comboScale</code>。1発目から 1, 1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4)。のけぞり・ダウンから抜けるとコンボは終わる。2発以上でコンボ数と合計ダメージを画面端に表示</td>
+</tr>
+<tr>
+<td>気絶</td>
+<td>受けたダメージ(補正後)×1.5 が気絶値にたまり、80でのけぞり・起き上がり後に目を回す(約2.5秒、動けない)。パンチ・キックの連打で短くなる(最低約0.8秒)。90フレーム攻撃を受けないと気絶値が減り始める。ガードではたまらない</td>
+</tr>
+</tbody>
+</table>
+<p>確認:判定の組み合わせは、立ちの相手に当たる・しゃがみの相手にはパンチがかわされる・当てたあとだけキャンセルできる・補正が 8,8,7,6,6,5 と減る・気絶して連打で短くなる、をテストで確認した。</p>
+<h3 id="11b8">11b.8 絵の差し替え口(スプライトシート)</h3>
+<p>画像(PNG)の絵を、自動生成の絵と同じように使えるようにした。手描きの絵に差し替えるための土台。</p>
+<ul>
+<li>見た目の種類に <code>style: 'sheet'</code> を追加(<code>js/data/palettes.js</code> の <code>Game.Data.Looks</code>)。切り出し定義は <code>assets/&lt;名前&gt;.data.js</code> が <code>Game.Data.Sheets</code> に登録する(<code>file://</code> で動かすため JSON は fetch せず、スクリプトで読む)。</li>
+<li>切り出し定義:コマごとの <code>x, y, w, h</code>(画像内の範囲)と <code>ox, oy</code>(足元の位置)、<code>artScale</code>(絵の1ドットがゲームの何分の1単位か)、任意で <code>hurt</code>(コマごとの喰らい判定)。ポーズが足りない・画像が読めないときは <code>fallback</code> の自動生成の絵になる。</li>
+<li>絵はゲームの細かさ(pixelScale)に合わせて、ドットをぼかさず拡大して使う(<code>Sprites.get</code> が画像を作ってキャッシュ)。画像の読み込みが終わってからゲームを始める(<code>main.js</code>)。</li>
+<li>道具:<code>tools/export_sheet.py</code>(自動生成の絵を画像に書き出す。見本 <code>hero_sheet</code> はこれで作った)、<code>tools/aseprite_to_sheet.py</code>(Aseprite の書き出しを変換)。手順とポーズ名の一覧は <code>assets/README.md</code>。</li>
+<li>選択画面に、見本のキャラ「HERO SHEET」を足した(画像で動くことの確認用。不要なら設定から消してよい)。</li>
+</ul>
+<h3 id="11b9">11b.9 動きの滑らかさ(中間コマ)と画像の切り詰め</h3>
+<ul>
+<li>ポーズとポーズの間を、関節位置の補間で作った中間コマで埋める(<code>display.config.js</code> の <code>anim.tweenSteps</code>、3 = 間を3段階。1で中間なし)。<code>Fighter.pose()</code> が小数のコマ番号を返し、<code>Sprites.get</code> がそれに合う画像を作ってキャッシュする。</li>
+<li>技の動き:発生までは「ゆっくり入って速く伸びる」(溜め)、攻撃中は伸びきった姿勢を保ち、硬直は前半で素早く戻って後半は止まる。歩き・待機・気絶も細かく動く。</li>
+<li>喰らい判定も中間コマの関節から作るので、動きの途中の腕や脚の位置がそのまま判定に反映される。</li>
+<li>画像は絵のある範囲だけに切り詰めて持つ(1枚あたりのメモリが約6割減。立ち絵で 256×256 → 120×215 の例)。足元の位置は画像ごとに <code>originX</code> / <code>originY</code> で持つ。</li>
+<li>起動時は整数コマだけ先に作り、中間コマは開始後に少しずつ作る(<code>Sprites.warm</code>、1回約6ms)。間に合わないコマは使うときに作られる。</li>
+<li>画像(スプライトシート)の見た目は中間コマを持たず、手描きのコマをそのまま出す。</li>
+</ul>
+<h3 id="11b10">11b.10 背景の多層化とアニメーション</h3>
+<ul>
+<li>背景を、空・遠いビル・近いビル・地面の層に分けて作る(<code>render/background.js</code>)。戦っている2人の中間の位置に応じて、奥の層ほど小さく、手前ほど大きくずれる(視差。地面は動かない)。設定は <code>display.config.js</code> の <code>stage</code>(<code>parallax</code> = ずれる量、<code>animate: false</code> で動きを止める)。</li>
+<li>動くもの:またたく星、点滅する窓、ゆっくり流れる雲、柵の向こうでゆれる観客(ときどき手を上げる)。</li>
+<li>測定(ヘッドレス):描画の平均約1ms、60fps。</li>
+</ul>
+<h3 id="11b11">11b.11 ポーズごとの絵の描き分け</h3>
+<p>関節を動かしただけの同じ絵に見えないよう、ポーズ(コマ)ごとに顔・手・効果を描き分けるようにした(<code>js/data/sprites.js</code> の <code>DETAIL</code> 表)。</p>
+<ul>
+<li>表情:普通 / 気合い(攻撃の当たる瞬間。吊り眉・細めた目・開いた口)/ 食いしばり(昇竜・ガード・投げの組み付き)/ 集中(構え・戻り)/ 苦悶(やられ。&gt;&lt;の目・八の字眉)/ 目を回す(気絶。渦巻きの目)/ 閉じた目(ダウン)。道着・ワイシャツの両方の顔に効く(<code>drawFace</code>)。</li>
+<li>手:波動・投げ・叩きつけ・やられ・気絶・ダウンは、握りこぶしでなく指を開いた手にした(<code>openHand</code>)。</li>
+<li>効果(輪郭線のあとに白で重ねる。<code>R.late</code>):パンチ/キックの軌跡、昇竜の上昇線、サマーソルトの三日月、波動の気の光とため、投げの力線、叩きつけの地面の衝撃、被弾の衝撃マークと汗、ダウンの土ぼこり。</li>
+<li>書き方:<code>DETAIL[ポーズ名][コマ番号] = { f: 表情, oF/oB: 手を開く, fx: [効果名...] }</code>。省略したコマは普通の顔・握りこぶし・効果なし。中間コマは近いほうのコマの描き分けを使う。</li>
+<li>描画の重さは変わらない(測定は従来と同等)。見た目はキャッシュされ、描き分けはコマごとに1回だけ作る。</li>
+</ul>
+<h3 id="11b12">11b.12 キャラ固有の技</h3>
+<p>技ライブラリ(<code>moves.config.js</code>)にキャラ専用の技を足し、<code>characters.config.js</code> の <code>specials</code> で技を振り分けた。</p>
+<ul>
+<li>HERO:波動(↓↘→+P)・昇竜(→↓↘+P)・STAR BLAST(超必殺)の「基本の型」。ため技と叩きつけは持たない。</li>
+<li>NAKAGAWA:ため技と投げ中心。書類ばらまき(←ため→+P。速くて軽い)・カバン投げ(↓↘→+P。遅くて重い)・ヒールキック(↓ため↑+K。威力+1)・叩きつけ(半回転+P)・超必殺 OVERTIME(書類の嵐)。足は遅め(walkSpeed 1.35)・ジャンプは低め、立ちパンチのリーチが長い。</li>
+<li>飛び道具の見た目は <code>projectile.look</code>('paper' = 紙 / 'case' = カバン。省略は気の玉)で選ぶ(<code>renderer.js</code> の <code>drawThrown</code>)。</li>
+<li>CPUは、持っている技の種類(飛び道具・対空・投げ・超必殺)から自動で選ぶので、キャラごとの技でもそのまま動く。</li>
+<li>新しい技のポーズは、既存ポーズを <code>pose</code> で使い回す(専用ポーズは今後)。</li>
+</ul>
+<h3 id="11b13">11b.13 新技の専用ポーズ</h3>
+<p>NAKAGAWA の新技に、波動の使い回しではなく専用のポーズ(各3コマ:構え → 放つ → 戻り)を付けた(<code>sprites.js</code>)。</p>
+<ul>
+<li><code>paperToss</code>(書類ばらまき):書類の束を体の前へ引く → 横に振り抜く(開いた手と軌跡)。</li>
+<li><code>briefcase</code>(カバン投げ):カバンを頭の後ろへ振りかぶる → 体ごと前へ投げ出す → 前かがみで残心。</li>
+<li><code>overtime</code>(OVERTIME):書類を腰の後ろへ溜める → 両腕を大きく広げて書類を撒き散らす → 前へ突き出す。</li>
+<li>技側は <code>moves.config.js</code> の <code>pose</code> で指定。持ち物(カバン・書類の束・舞う書類)は <code>DETAIL</code> の効果 <code>caseHeld / paperHeld / papers</code> で重ねて描く。</li>
+<li>配色に <code>c</code> / <code>C</code>(カバンの茶色と影)を追加(<code>palettes.js</code>、全配色)。</li>
+</ul>
+<h3 id="11b14">11b.14 写真から作るステージ(池袋の喫煙所前)</h3>
+<ul>
+<li>写真をドット絵風の背景画像にして使うステージを追加した。<code>tools/make_stage.py 写真.png assets/stage_xxx.png</code> で作る(412:224 に切り出し → 824×448 に縮小 → 48色に減色)。画像は左右に余白 14 を持ち、戦っている2人に合わせて少しだけ横にずれる(視差)。</li>
+<li>設定:<code>display.config.js</code> の <code>stage.list</code>(ステージ名 → 画像・視差量)と <code>stage.id</code>(使うステージ)。<code>night</code> は従来の自動生成の夜の街。</li>
+<li>対戦中・タイトル中に B キーでステージを切り替えられる(<code>renderer.js</code>)。画像を読み込めない間は夜の街を出す。</li>
+<li>写真には通行人(ぼかし済み)が写っている。ドット絵化でさらに判別できなくなるが、左下の傘の人物はキャラと重なりやすい。必要なら写真側で人物を消してから変換する(単純な自動補完は不自然になったので採用しなかった)。</li>
+</ul>
+<h3 id="11b15">11b.15 デフォルメしたステージ「駅前の喫煙所」</h3>
+<p>写真をそのまま使う方式(11b.14)をやめ、写真の雰囲気をもとに、ゲームの絵柄に合わせて形をデフォルメして自動で描くステージにした(<code>render/stageStreet.js</code>)。これが初期のステージ(<code>stage.id: 'street'</code>)。</p>
+<ul>
+<li>描くもの:昼の空と流れる雲、遠景のビルと赤白の鉄塔(点滅)、白いデパート(水平のバルコニーの帯・青い縦看板・垂れ幕・壁面緑化)、中央の切れ目から見える緑のパネル壁と植え込み、左右のガラスの囲い(反射・掲示物・SMOKING AREA の看板・黄色い注意書き)、敷石の歩道。</li>
+<li>動き:雲、アンテナの点滅、囲いの向こうで立ち話をする人たち(ゆれる)、傘をさして歩く人。奥の層ほど小さく視差でずれる。人物は実在の人を写したものではなく、デフォルメした通行人。</li>
+<li>切り替え:B キーで「駅前の喫煙所 → 写真のドット絵(参考)→ 夜の街」の順に切り替わる。<code>display.config.js</code> の <code>stage.list</code> に <code>builder</code>(自動で描く)/ <code>image</code>(画像)で足せる。</li>
+</ul>
+<h3 id="11b16">11b.16 ステージ「赤レンガの駅舎」</h3>
+<p>東京駅の丸の内側の写真をもとに、デフォルメして自動で描くステージを追加した(<code>render/stageTokyo.js</code>。写真は使わない)。</p>
+<ul>
+<li>描くもの:くもり空と流れる雲、ガラスの高層ビル、赤レンガの駅舎(白い柱と窓、スレート屋根、中央と左右の切妻、両端のドーム)、並木と街灯、芝生の広場、道路と横断歩道、手前の黒い柵、敷石の歩道。</li>
+<li>動き:雲、広場を歩く人、道路を走る車(2車線・向きが逆)。空・ビル・駅舎・並木は視差でずれ、広場から手前は動かない。</li>
+<li>ステージの順:B キーで「駅前の喫煙所 → 赤レンガの駅舎 → 写真のドット絵(参考)→ 夜の街」。初期ステージは <code>display.config.js</code> の <code>stage.id</code>。</li>
+</ul>
+<h3 id="11b17">11b.17 ステージ「繁華街の交差点」</h3>
+<p>カラオケ店のある街角の写真をもとに、デフォルメして自動で描くステージを追加した(<code>render/stageKaraoke.js</code>。写真は使わない)。</p>
+<ul>
+<li>描くもの:青空、茶色いマンション・灰色の段々ビル・ガラス張りのビル(窓のポスター、入口)、赤いネオン看板と青い縦看板、電柱と丸い標識、街路樹、れんが色の歩道と黄色い線、緑の柵と植え込み、右の低い柵と生け垣、赤い舗装の道路(斜めのすじ)。足元は赤い道路。</li>
+<li>看板の文字は実在の店名ではなく、一般名詞の「カラオケ」を線で描いた文字(<code>GLYPH</code> 表。フォントに依存しない)。ネオン文字はゆっくり明滅する。</li>
+<li>動き:雲、ネオンの明滅、歩く人(青いスーツの人など)。空・遠景・ビル・電柱は視差でずれ、歩道から手前は動かない。</li>
+<li>ステージの順:B キーで「駅前の喫煙所 → 赤レンガの駅舎 → 繁華街の交差点 → 写真のドット絵(参考)→ 夜の街」。</li>
+</ul>
+<h3 id="11b18">11b.18 ステージ「スクランブル交差点」</h3>
+<p>渋谷の交差点と円筒形のファッションビルの写真をもとに、デフォルメして自動で描くステージを追加した(<code>render/stageScramble.js</code>。写真は使わない)。</p>
+<ul>
+<li>描くもの:くもり空、銀色の円筒形のビル(丸みのある継ぎ目・細長い窓)と左右の斜めの箱形、青いガラスの格子と白い垂れ幕、金色の庇とピンクの看板、周りのビル群と紫の大型ビジョン、電柱と信号、葉のない街路樹、標識、歩道と人だかり、道路と横断歩道(足元)。</li>
+<li>看板・垂れ幕・大型ビジョンは、実在のロゴや文字・人物の写真を使わず、文字のない抽象的な図柄にしてある。</li>
+<li>動き:雲、信号の入れ替わり、人だかりのゆれ、奥の道路を走る車(白い車・バス・トラック)、横断歩道を渡る人。空・遠景・ビル・手前の建物は視差でずれ、歩道から手前は動かない。</li>
+<li>ステージの順:B キーで「駅前の喫煙所 → 赤レンガの駅舎 → 繁華街の交差点 → スクランブル交差点 → 写真のドット絵(参考)→ 夜の街」。</li>
+</ul>
+<h3 id="11b19-2-vs">11b.19 画面遷移をストリートファイター2風に(タイトル → キャラ選択 → VS画面)</h3>
+<p>画面の流れを <code>タイトル(PRESS START)→ メニュー(1 PLAYER / VS BATTLE)→(CPU強さ)→ キャラ選択 → VS画面 → 対戦 → 結果(REMATCH / CHARACTER SELECT / TITLE)</code> にした。</p>
+<ul>
+<li>タイトル(<code>ui.js</code> の <code>drawTitle</code>):押し出しロゴ(影を重ねた厚み)と、横切る光の帯、点滅する PRESS START BUTTON。背景は選ばれているステージ。</li>
+<li>キャラ選択(<code>scenes/select.js</code>):中央に顔のアイコン(4×8枠、未実装の枠は「?」)、左右に1P(赤)・2P(青)の上半身と名前・肩書き、上にステージの予告(いま見ているキャラのステージを縮小して実際の背景で表示)。2P対戦は両者が同時に選ぶ。1人用は1Pが決めるとCPU側がルーレットで切り替わって決まる。キックで取り消し、誰も決めていなければタイトルへ。</li>
+<li>VS画面(<code>scenes/versus.js</code>):左右の色の斜め面に、2人の上半身が滑り込み、中央に VS、下に名前、上にステージ名。約2.5秒、パンチ/スタートで飛ばせる。</li>
+<li>ステージはキャラごと(<code>characters.config.js</code> の <code>stage</code>。対戦の舞台は1Pのキャラで決まる)。肩書きは <code>tag</code>。顔と上半身の絵は待機ポーズの切り出し(<code>render/portrait.js</code>。専用の絵を作らなくてもキャラを足せば出る)。</li>
+<li>対戦の結果メニューに「CHARACTER SELECT」を追加。文字(フォント)に「?」と「/」を追加。</li>
+<li>遷移の部品:<code>Renderer.draw</code> は、シーンが <code>drawScreen(ctx)</code> を持っていればその画面を丸ごと描く(選択・VS画面はこれ)。<code>Renderer.setStage(id)</code> / <code>backgroundOf(id)</code> で背景を指定できる。</li>
+</ul>
+<h3 id="11b20-58">11b.20 ステージのランダム化と、サンプルキャラ5人の追加(選択画面の8枠を埋める)</h3>
+<ul>
+<li>ステージはキャラ固有ではなくランダム:<code>scenes/select.js</code> が画面に入るたびに <code>display.config.js</code> の <code>stage.list</code> から1つ選び(<code>this.stageId</code>)、予告表示・VS画面・対戦で同じものを使う。<code>characters.config.js</code> の <code>stage</code> は使われない(残してあるだけ)。</li>
+<li>汎用の人物 <code>style: 'casual'</code>(<code>sprites.js</code> の <code>paintCasual</code>):<code>palettes.js</code> の look に <code>opts</code> を書くだけで見た目を作れる。</li>
+<li><code>hair</code>: short / spiky / buzz / bald / long / pony / bun / buns / afro</li>
+<li><code>top</code>: long / tee / tank / bare / dress　<code>bottom</code>: pants / shorts / skirt / none</li>
+<li><code>thick</code>(体の太さ。1.28=大柄、0.9=細身)、<code>beard</code>、<code>band</code>、<code>gloves</code>、<code>glasses</code>、<code>lips</code>、<code>mark</code></li>
+<li>色は2色セット(1P/2P)。共通の色は <code>base()</code> が補うので、変えたい色だけ書く。奥側の手足を暗くする対応表は <code>sprites.js</code> の <code>DARK</code>。</li>
+<li>仮キャラ5人(技は既存の技ライブラリの組み合わせ。数値は仮):MEI(中国・女性・小柄で素早い)、BORIS(ロシア・男性・大柄で投げが強い)、ISA(ブラジル・女性・蹴り中心)、JAX(アメリカ・男性・ボクサー)、PRIYA(インド・女性・投げと飛び道具)。<code>characters.config.js</code> の order で8人。</li>
+<li>選択画面のHERO SHEETの顔アイコンが小さい問題を直した(<code>portrait.js</code> の <code>sheetFace</code>。file:// では画素を読めないので、足元の位置からの目安で切り出す)。</li>
+</ul>
+<h3 id="11b21">11b.21 ダッシュとバックステップ</h3>
+<ul>
+<li>前を素早く2回押す(<code>physics.config.js</code> の <code>dashTapFrames</code> = 14フレーム以内)とダッシュ。2回目を押し続けるあいだ走り続け(<code>dashSpeed</code> 3.4)、離すと止まる(最短 <code>dashMinFrames</code> 8フレームは走る)。ダッシュ中にパンチ/キック/ジャンプ/投げに移れる。しゃがむとやめる。</li>
+<li>後ろを素早く2回押すとバックステップ(<code>backstepFrames</code> 18、初速 <code>backstepSpeed</code> 3.6、少し浮く <code>backstepHop</code> 7)。動き出したら止まれず、ガードも投げられもしない状態になるが、攻撃は受ける。</li>
+<li>実装は <code>fighter.js</code>:<code>detectDoubleTap</code>(押した瞬間の間隔を見る)と、状態 <code>dash</code> / <code>backstep</code>。値は <code>physics.config.js</code>(キャラごとに <code>body</code> で上書き可)。絵は歩きのポーズを速く回す/ジャンプのポーズ(専用ポーズは未作成)。</li>
+</ul>
 </main>
 <script>
 document.querySelectorAll('table').forEach(t => {

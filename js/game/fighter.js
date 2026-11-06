@@ -1,5 +1,6 @@
 // キャラクター。状態機械と移動、攻撃、必殺技を持つ。描画には一切触れない。
 // 状態:idle(待機) walk(歩く) jump(ジャンプ) crouch(しゃがみ)
+//       dash(ダッシュ:前2回押し、押し続けると走り続ける) backstep(バックステップ:後ろ2回押し)
 //       attack(地上攻撃) jumpattack(空中攻撃) special(必殺技) landing(必殺技後の着地硬直)
 //       throwing(投げ中) thrown(投げられ中)
 //       throwing(投げ中) thrown(投げられ中)
@@ -43,6 +44,20 @@
       this.upWait = 0;                        // ため技の「↑+ボタン」を待っているフレーム数(ジャンプを少し遅らせる)
       this.throwEvent = null;                 // 投げが決まった瞬間のイベント(対戦画面が読み取って演出する)
       this.guardCrouch = false;               // しゃがみガードで受けたか(ポーズと高さに使う)
+      this.comboHits = 0;                     // いま受けているコンボの発数(受ける側が数える)
+      this.comboDamage = 0;                   // いま受けているコンボの合計ダメージ
+      this.lastDamage = 0;                    // 直近に受けたダメージ(補正後)
+      this.stun = 0;                          // 気絶値
+      this.stunIdle = 0;                      // 最後に攻撃を受けてからのフレーム数
+      this.dizzyPending = false;              // 気絶値がたまった(のけぞりが終わったら目を回す)
+      this.dizzyLeft = 0;                     // 気絶の残りフレーム
+      this.dizzyEvent = false;                // 気絶が始まった瞬間(対戦画面が音を鳴らす)
+      this.tapF = { last: -99, held: false }; // 前・後ろの2回押し(ダッシュ・バックステップ)の判定用
+      this.tapB = { last: -99, held: false };
+      this.tick = 0;
+      this.dashing = false;                   // ダッシュ中(前を押し続けるあいだ続く)
+      this.dashTrig = false;                  // このフレームに前を2回押した
+      this.backTrig = false;                  // このフレームに後ろを2回押した
     }
 
     get moveData() {
@@ -93,6 +108,16 @@
       // ガードの条件は毎フレームの入力で決まる(攻撃を受けた瞬間に後ろを押していればガード)
       this.backHeld = this.facing > 0 ? h.left : h.right;
       this.downHeld = h.down;
+      this.detectDoubleTap(h);
+
+      // コンボは、のけぞり・ダウンから抜けたら終わり。気絶値は、しばらく攻撃を受けないと減る
+      const st = this.state;
+      if (st !== 'hitstun' && st !== 'down' && st !== 'ko') { this.comboHits = 0; this.comboDamage = 0; }
+      const SC = Game.Config.combat.stun;
+      if (this.stun > 0 && st !== 'hitstun') {
+        this.stunIdle++;
+        if (this.stunIdle > SC.decayDelay) this.stun = Math.max(0, this.stun - SC.decayRate);
+      }
 
       switch (this.state) {
         case 'hitstun': case 'blockstun': case 'down': case 'getup': case 'ko':
@@ -101,8 +126,27 @@
         case 'attack':
           // 出始めに同時押しがあれば、通常技を投げに切り替える
           if (this.attackFrame <= Game.Config.input.throwWindowFrames && this.tryThrow(input, opponent)) return;
+          if (this.tryCancel(input, opponent)) return;
           this.updateGroundAttack();
           return;
+        case 'dizzy': {
+          // 気絶:動けない。パンチ・キックの連打で早く回復できる
+          this.vx = 0;
+          this.dizzyLeft--;
+          const mash = (input.pressed.punch ? 1 : 0) + (input.pressed.kick ? 1 : 0);
+          this.dizzyLeft -= mash * SC.mashReduce;
+          if (this.dizzyLeft <= 0 && this.stateFrame >= SC.minFrames) this.setState('idle');
+          return;
+        }
+        case 'backstep': {
+          // バックステップ:決まった長さだけ、少し浮きながら後ろへ下がる(途中では止まれない)
+          const dur = P.backstepFrames, u = Math.min(1, this.stateFrame / dur);
+          this.vx = -this.facing * P.backstepSpeed * (1 - u * 0.7);
+          this.moveX(this.vx);
+          this.y = Game.Config.display.floorY - P.backstepHop * 4 * u * (1 - u);
+          if (this.stateFrame >= dur) { this.y = Game.Config.display.floorY; this.vx = 0; this.setState('idle'); }
+          return;
+        }
         case 'throwing':
           this.updateThrow(opponent);
           return;
@@ -128,6 +172,7 @@
           this.stepAir();
           return;
         case 'special':
+          if (this.tryCancel(input, opponent)) return;
           this.updateSpecial();
           return;
         case 'landing':
@@ -166,14 +211,26 @@
         } else if (atk) {
           this.startAttack((h.down ? 'crouch' : 'stand') + atk, 'attack');
         } else if (h.down) {
+          this.dashing = false;
           this.vx = 0;
           this.setState('crouch');
+        } else if (this.backTrig && (this.state === 'idle' || this.state === 'walk')) {
+          this.dashing = false;
+          this.setState('backstep');
+          this.vx = -this.facing * P.backstepSpeed;
+        } else if ((this.dashTrig && (this.state === 'idle' || this.state === 'walk')) ||
+                   (this.dashing && (this.fwdHeld(h) || this.stateFrame < P.dashMinFrames))) {
+          this.dashing = true;
+          this.vx = this.facing * P.dashSpeed;
+          this.setState('dash');
         } else if (h.left !== h.right) {
+          this.dashing = false;
           const dir = h.right ? 1 : -1;
           const forward = dir === this.facing;
           this.vx = dir * P.walkSpeed * (forward ? 1 : P.backwalkRatio);
           this.setState('walk');
         } else {
+          this.dashing = false;
           this.vx = 0;
           this.setState('idle');
         }
@@ -187,6 +244,27 @@
 
       if (!this.onGround) this.stepAir();
       else this.moveX(this.vx);
+    }
+
+    fwdHeld(h) { return this.facing > 0 ? h.right : h.left; }
+
+    // 前・後ろを素早く2回押したか(押した瞬間の間隔で判定)。結果は dashTrig / backTrig(このフレームだけ true)
+    detectDoubleTap(h) {
+      const win = this.P.dashTapFrames;
+      const f = this.fwdHeld(h), b = this.backHeld;
+      this.tick++;
+      this.dashTrig = this.backTrig = false;
+      if (f && !this.tapF.held) {
+        if (this.tick - this.tapF.last <= win) { this.dashTrig = true; this.tapF.last = -99; }
+        else this.tapF.last = this.tick;
+        this.tapB.last = -99;
+      }
+      if (b && !this.tapB.held) {
+        if (this.tick - this.tapB.last <= win) { this.backTrig = true; this.tapB.last = -99; }
+        else this.tapB.last = this.tick;
+        this.tapF.last = -99;
+      }
+      this.tapF.held = f; this.tapB.held = b;
     }
 
     // 押した瞬間のボタン。'Punch' / 'Kick' / null
@@ -238,7 +316,7 @@
     // ---- 投げ ----
     // この技(投げ)で、相手をつかめるか
     canGrab(t, opp) {
-      const ok = { idle: 1, walk: 1, crouch: 1, blockstun: 1, landing: 1 };
+      const ok = { idle: 1, walk: 1, dash: 1, crouch: 1, blockstun: 1, landing: 1 };
       return this.onGround && opp.onGround && !!ok[opp.state] && Math.abs(opp.x - this.x) <= t.range;
     }
 
@@ -247,7 +325,7 @@
       const t = this.char.moves.throw;
       const p = input.pressed, h = input.held;
       if (!t || !((p.punch && h.kick) || (p.kick && h.punch))) return false;
-      if (this.state !== 'idle' && this.state !== 'walk' && this.state !== 'crouch' && this.state !== 'attack') return false;
+      if (this.state !== 'idle' && this.state !== 'walk' && this.state !== 'dash' && this.state !== 'crouch' && this.state !== 'attack') return false;
       if (!this.canGrab(t, opp)) return false;
       this.beginThrow('throw', opp);
       return true;
@@ -320,6 +398,20 @@
         this.move = null;
         this.setState('idle');
       }
+    }
+
+    // キャンセル:技が当たった(ガードされた)あと、硬直を必殺技の入力で打ち切って次の技を出す
+    //   moves の cancel: 'special' = 必殺技・超必殺技へ / 'super' = 超必殺技へ
+    tryCancel(input, opp) {
+      const m = this.moveData;
+      if (!m || !m.cancel || !this.hitDone || !this.onGround) return false;
+      const sp = this.detectSpecial(input, opp);
+      if (!sp || sp === this.move) return false;
+      const sm = this.char.moves[sp];
+      if (sm.throw) return false;                          // コマンド投げへはキャンセルできない
+      if (m.cancel === 'super' && !sm.cost) return false;
+      this.startSpecial(sp);
+      return true;
     }
 
     startAttack(name, state) {
@@ -424,10 +516,25 @@
       this.wallPush = this.moveX(this.vx);
 
       if ((this.state === 'hitstun' || this.state === 'blockstun') && this.stateFrame >= this.stunFrames) {
-        this.setState('idle');
+        this.recover();
       } else if (this.state === 'down' && this.stateFrame >= P.downFrames) {
         this.setState('getup');
       } else if (this.state === 'getup' && this.stateFrame >= P.getupFrames) {
+        this.recover();
+      }
+    }
+
+    // のけぞり・起き上がりが終わったとき:気絶値がたまっていれば目を回す
+    recover() {
+      if (this.dizzyPending && this.health > 0) {
+        const SC = Game.Config.combat.stun;
+        this.dizzyPending = false;
+        this.stun = 0;
+        this.dizzyLeft = SC.dizzyFrames;
+        this.dizzyEvent = true;
+        this.setState('dizzy');
+      } else {
+        this.dizzyPending = false;
         this.setState('idle');
       }
     }
@@ -464,7 +571,20 @@
     // ダメージとのけぞり(ガードできない攻撃・投げもここを通る)
     applyHit(move, dir) {
       const P = this.P;
-      this.health = Math.max(0, this.health - move.damage);
+      this.dashing = false;
+      if (this.onGround) this.y = Game.Config.display.floorY;      // バックステップで浮いていたら地面に戻す
+      // コンボ補正:続けて当たるほどダメージが減る
+      const CS = Game.Config.combat.comboScale;
+      const dmg = Math.max(1, Math.round(move.damage * CS[Math.min(this.comboHits, CS.length - 1)]));
+      this.lastDamage = dmg;
+      this.comboHits++;
+      this.comboDamage += dmg;
+      // 気絶値
+      const SC = Game.Config.combat.stun;
+      this.stun += dmg * SC.perDamage;
+      this.stunIdle = 0;
+      if (this.stun >= SC.threshold) this.dizzyPending = true;
+      this.health = Math.max(0, this.health - dmg);
       this.move = null;
       this.hitDone = false;
       this.state = 'hitstun';
@@ -500,7 +620,9 @@
     pose() {
       const A = Game.Config.display.anim;
       switch (this.state) {
-        case 'walk': return { name: 'walk', frame: Math.floor(this.stateFrame / A.walk) };
+        case 'walk': return { name: 'walk', frame: this.stateFrame / A.walk };
+        case 'dash': return { name: 'walk', frame: this.stateFrame / (A.walk * 0.6) };
+        case 'backstep': return { name: 'jump', frame: 0 };
         case 'jump': return { name: 'jump', frame: 0 };
         case 'crouch': return { name: 'crouch', frame: 0 };
         case 'attack':
@@ -508,8 +630,17 @@
         case 'special': {
           const m = this.moveData;
           const t = this.attackFrame;
-          const phase = t < m.startup ? 0 : (t < m.startup + m.active ? 1 : 2);
-          return { name: m.pose || this.move, frame: phase };
+          // 溜め(発生前→攻撃)はゆっくり入って速く伸び、硬直は前半で素早く戻る。コマの間は中間コマで補う
+          const x = t < m.startup ? t / Math.max(1, m.startup) : 1;
+          let pos = x * x;
+          if (t >= m.startup + m.active) {
+            const r = (t - m.startup - m.active) / Math.max(1, m.recovery || 1);
+            const e = Math.min(1, r * 1.5);
+            pos = 1 + e * e * (3 - 2 * e);
+          } else if (t >= m.startup) {
+            pos = 1;
+          }
+          return { name: m.pose || this.move, frame: pos };
         }
         case 'throwing': {
           const m = this.moveData;
@@ -524,8 +655,9 @@
         case 'hitstun': return { name: 'hit', frame: 0 };
         case 'blockstun': return { name: this.guardCrouch ? 'crouchGuard' : 'guard', frame: 0 };
         case 'down': case 'ko': return { name: 'down', frame: 0 };
+        case 'dizzy': return { name: 'dizzy', frame: this.stateFrame / 8 };
         case 'getup': return { name: 'crouch', frame: 0 };
-        default: return { name: 'idle', frame: Math.floor(this.stateFrame / A.idle) };
+        default: return { name: 'idle', frame: this.stateFrame / A.idle };
       }
     }
   }

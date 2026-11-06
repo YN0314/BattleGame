@@ -8,6 +8,21 @@
   let acc = 0;
   let fps = 0, fpsCount = 0, fpsTime = 0;
 
+  // 例外が起きてもループは止めない。内容は画面の左上に出す(原因調査用。クリックで消える)
+  let errBox = null, errCount = 0;
+  function report(where, e) {
+    errCount++;
+    if (errCount <= 3) console.error('[' + where + '] ' + (e && e.stack || e));
+    if (!errBox) {
+      errBox = document.createElement('pre');
+      errBox.style.cssText = 'position:fixed;left:4px;top:4px;max-width:90vw;margin:0;padding:6px 8px;background:rgba(160,0,0,.9);color:#fff;font:12px/1.4 monospace;white-space:pre-wrap;z-index:9999;cursor:pointer';
+      errBox.onclick = function () { errBox.style.display = 'none'; };
+      document.body.appendChild(errBox);
+    }
+    errBox.style.display = 'block';
+    errBox.textContent = 'ERROR in ' + where + ' (x' + errCount + ')\n' + (e && e.stack || e);
+  }
+
   function start(update, render) {
     const cfg = Game.Config.game;
     const step = 1000 / cfg.fps;
@@ -20,7 +35,7 @@
       last = now;
       acc += dt;
       while (acc >= step) {
-        update();
+        try { update(); } catch (e) { report('update', e); }
         acc -= step;
         fpsCount++;
       }
@@ -29,7 +44,7 @@
         fps = Math.round(fpsCount * 1000 / fpsTime);
         fpsCount = 0; fpsTime = 0;
       }
-      render();
+      try { render(); } catch (e) { report('render', e); }
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);

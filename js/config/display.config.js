@@ -11,7 +11,23 @@ Game.Config.display = {
 
   anim: {                  // アニメーション1コマの長さ(フレーム)
     idle: 20,
-    walk: 6
+    walk: 6,
+    tweenSteps: 3          // ポーズとポーズの間に作る中間コマの細かさ(3 = 間を3段階に分ける。1で中間なし)
+  },
+
+  stage: {                 // 背景
+    parallax: 14,          // 戦っている2人の位置に合わせて層がずれる量(ゲーム単位。0でずれなし)
+    animate: true,         // false で、星・窓・雲・観客の動きを止める
+    id: 'street',       // 使うステージ(下の list のキー。'night' = 夜の街)。対戦中に B キーで切り替えられる
+    // ステージ一覧。builder = 自動で描くステージ(render/stageXxx.js)、image = tools/make_stage.py で作った画像、parallax = 2人に合わせてずれる量(0〜1)
+    list: {
+      street: { builder: 'StageStreet', name: 'STATION FRONT' },                       // 駅前の喫煙所(池袋の写真をもとにデフォルメして自動で描く)
+      tokyo: { builder: 'StageTokyo', name: 'BRICK STATION' },                         // 赤レンガの駅舎(東京駅の写真をもとにデフォルメして自動で描く)
+      karaoke: { builder: 'StageKaraoke', name: 'DOWNTOWN' },                     // 繁華街の交差点(カラオケ店のある街角の写真をもとにデフォルメして自動で描く)
+      scramble: { builder: 'StageScramble', name: 'SCRAMBLE CROSSING' },                   // スクランブル交差点(渋谷の交差点の写真をもとにデフォルメして自動で描く)
+      photo: { image: 'assets/stage_ikebukuro.png', parallax: 0.5, name: 'PHOTO' },   // 写真をそのままドット絵にしたもの(参考)
+      night: { name: 'NIGHT CITY' }      // 画像なし = 自動生成の夜の街
+    }
   },
 
   effects: {

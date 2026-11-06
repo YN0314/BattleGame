@@ -1,7 +1,8 @@
 // タイトル画面。最初に「ボタンを押してください」→ モード選択。
 //   stage 'press' : ボタン待ち(ここで押されたキー操作が、のちに音を鳴らす許可にもなる)
-//   stage 'menu'  : 「VS 2P」「VS CPU」を選ぶ
+//   stage 'menu'  : 「1 PLAYER」「VS BATTLE」を選ぶ
 //   stage 'level' : CPUの強さ(EASY / NORMAL)を選ぶ
+//   決まったら選択画面(scenes/select.js)→ VS画面(scenes/versus.js)→ 対戦の順に進む
 (function () {
   'use strict';
 
@@ -20,8 +21,8 @@
     // メニュー項目。enabled が false の項目は選べない(CPUは実装されるまで)
     items: function () {
       return [
-        { label: 'VS 2P', enabled: true, mode: '2p' },
-        { label: 'VS CPU', enabled: !!Game.Logic.AI, mode: 'cpu' }
+        { label: '1 PLAYER', enabled: !!Game.Logic.AI, mode: 'cpu' },
+        { label: 'VS BATTLE', enabled: true, mode: '2p' }
       ];
     },
 
@@ -31,13 +32,18 @@
       });
     },
 
-    enter: function () {
+    // 背景で立っている2人を作り直す(キャラ選択中は、選択中のキャラを見せる)
+    setFighters: function (c0, c1) {
       const F = Game.Logic.Fighter;
       const W = Game.Config.display.width;
       this.fighters = [
-        new F({ index: 0, x: W * 0.22, facing: 1, palette: 0 }),
-        new F({ index: 1, x: W * 0.78, facing: -1, palette: 1 })
+        new F({ index: 0, x: W * 0.22, facing: 1, palette: 0, character: c0 }),
+        new F({ index: 1, x: W * 0.78, facing: -1, palette: 1, character: c1 })
       ];
+    },
+
+    enter: function () {
+      this.setFighters();
       Game.Logic.Projectile.reset();
       Game.Render.Effects.reset();
       Game.Render.UI.reset();
@@ -67,7 +73,7 @@
         if (nav.up) { this.levelIndex = (this.levelIndex + m - 1) % m; Game.Core.Sound.play('move'); }
         if (nav.down) { this.levelIndex = (this.levelIndex + 1) % m; Game.Core.Sound.play('move'); }
         if (nav.back) { this.stage = 'menu'; Game.Core.Sound.play('back'); }
-        else if (nav.confirm) { Game.Core.Sound.play('ok'); SM.go('battle', { mode: 'cpu', level: lv[this.levelIndex].level }); }
+        else if (nav.confirm) { Game.Core.Sound.play('ok'); SM.go('select', { mode: 'cpu', level: lv[this.levelIndex].level }); }
         return;
       }
 
@@ -85,7 +91,7 @@
       if (nav.confirm && items[this.index].enabled) {
         Game.Core.Sound.play('ok');
         if (items[this.index].mode === 'cpu') { this.stage = 'level'; return; }
-        SM.go('battle', { mode: items[this.index].mode });
+        SM.go('select', { mode: '2p' }); return;
       }
     },
 

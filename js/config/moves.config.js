@@ -24,28 +24,34 @@
 //   blockKnockback : ガードされたときの相手が押される初速(px/フレーム)
 //   knockdown      : true なら、当たった相手はダウンする
 //   hitbox         : 攻撃判定の箱。足元の中央が原点で、右向きの場合の座標(左向きは自動で反転)。yは上が負
+//   cancel         : 'special' = 当てた(ガードされた)あと、必殺技・超必殺技の入力で硬直を打ち切って出せる / 'super' = 超必殺技だけ
+//   hitbox の配列 : [{ t, x, y, w, h }, ...] と書くと、判定が出てから t フレーム目以降はその箱に切り替わる(技の途中で伸びる)
 //   level          : ガードのされ方
 //                    'high' = 上段(立ちガードのみ可) / 'low' = 下段(しゃがみガードのみ可) / 'mid' = 中段(どちらでも可)
 Game.Config.moves = {
   standPunch: {
+    cancel: 'special',
     startup: 4, active: 3, recovery: 8,
     damage: 5, hitstun: 14, knockback: 2.2, hitstop: 5,
     blockstun: 10, blockKnockback: 1.6,
     hitbox: { x: 6, y: -40, w: 20, h: 8 }, level: 'mid'
   },
   standKick: {
+    cancel: 'special',
     startup: 7, active: 4, recovery: 12,
     damage: 8, hitstun: 18, knockback: 3.0, hitstop: 7,
     blockstun: 13, blockKnockback: 2.2,
-    hitbox: { x: 4, y: -33, w: 24, h: 10 }, level: 'mid'
+    hitbox: [{ t: 0, x: 4, y: -33, w: 17, h: 10 }, { t: 2, x: 4, y: -33, w: 24, h: 10 }], level: 'mid'
   },
   crouchPunch: {
+    cancel: 'special',
     startup: 5, active: 3, recovery: 8, crouch: true,
     damage: 4, hitstun: 13, knockback: 1.8, hitstop: 5,
     blockstun: 9, blockKnockback: 1.4,
     hitbox: { x: 6, y: -23, w: 20, h: 8 }, level: 'mid'
   },
   crouchKick: {
+    cancel: 'special',
     startup: 7, active: 4, recovery: 14, crouch: true,
     damage: 6, hitstun: 18, knockback: 2.6, hitstop: 6,
     blockstun: 13, blockKnockback: 2.0, knockdown: true,
@@ -69,6 +75,7 @@ Game.Config.moves = {
   //   projectile: speed=速さ(px/フレーム) offsetX/offsetY=出る位置 w/h=当たりの大きさ
   //               以降は通常技と同じ(damage, hitstun, knockback, hitstop, blockstun, blockKnockback, level)
   fireball: {
+    cancel: 'super',
     special: true, command: 'fireball',
     startup: 12, active: 0, recovery: 22,
     projectile: {
@@ -81,6 +88,7 @@ Game.Config.moves = {
   //   invuln=技の出始めの無敵フレーム数  launch=飛び上がりの速さ(vy:上向きが負, vx:前へ)
   //   active=上昇中に攻撃判定が出ているフレーム数  landRecovery=着地後に動けないフレーム数
   uppercut: {
+    cancel: 'super',
     special: true, command: 'uppercut',
     startup: 3, active: 10, recovery: 0,
     invuln: 6, launch: { vy: -7.4, vx: 1.6 }, landRecovery: 24,
@@ -92,6 +100,7 @@ Game.Config.moves = {
   // ---- ため技 ----
   // ソニックブーム風:←ため→+パンチ。速くて小さい飛び道具。出したあとの隙は大きめ。
   sonic: {
+    cancel: 'super',
     special: true, command: 'sonic', pose: 'fireball',
     startup: 10, active: 0, recovery: 26,
     projectile: {
@@ -102,6 +111,7 @@ Game.Config.moves = {
   },
   // サマーソルト風:↓ため↑+キック。後ろへ跳びながら蹴り上げる。ダウンを奪う。
   flashkick: {
+    cancel: 'super',
     special: true, command: 'flashkick', button: 'kick',
     startup: 4, active: 12, recovery: 0,
     launch: { vy: -8, vx: -1.0 }, landRecovery: 18,
@@ -139,6 +149,41 @@ Game.Config.moves = {
     projectile: {
       speed: 4.2, offsetX: 24, offsetY: -34, w: 44, h: 30, big: true,
       damage: 34, hitstun: 30, knockback: 4.0, hitstop: 12, knockdown: true,
+      blockstun: 22, blockKnockback: 3.4, level: 'mid', chip: 0.2, noMeter: true
+    }
+  },
+
+  // ---- NAKAGAWA 専用技(characters.config.js の nakagawa が使う)----
+  // 書類ばらまき:←ため→+パンチ。紙の束を低く速く飛ばす。軽いが隙が小さい。(projectile.look = 'paper' で紙の見た目)
+  paperToss: {
+    cancel: 'super',
+    special: true, command: 'sonic', pose: 'paperToss',
+    startup: 9, active: 0, recovery: 20,
+    projectile: {
+      look: 'paper', speed: 5.8, offsetX: 20, offsetY: -30, w: 16, h: 9,
+      damage: 6, hitstun: 14, knockback: 2.2, hitstop: 5,
+      blockstun: 11, blockKnockback: 1.8, level: 'mid'
+    }
+  },
+  // カバン投げ:↓↘→+パンチ。ゆっくり大きく飛ぶ重い一撃。
+  briefcase: {
+    cancel: 'super',
+    special: true, command: 'fireball', pose: 'briefcase',
+    startup: 16, active: 0, recovery: 26,
+    projectile: {
+      look: 'case', speed: 2.4, offsetX: 18, offsetY: -30, w: 20, h: 14,
+      damage: 14, hitstun: 22, knockback: 3.4, hitstop: 8,
+      blockstun: 16, blockKnockback: 2.8, level: 'mid'
+    }
+  },
+  // 残業突入(超必殺技):書類の嵐。大きな飛び道具で、普通の飛び道具を打ち消して進む。
+  overtime: {
+    special: true, command: 'superfireball', pose: 'overtime',
+    cost: 100, noMeter: true, title: 'OVERTIME', chip: 0.2,
+    startup: 14, active: 0, recovery: 34, invuln: 14,
+    projectile: {
+      look: 'paper', speed: 3.8, offsetX: 24, offsetY: -34, w: 48, h: 34, big: true,
+      damage: 36, hitstun: 30, knockback: 4.0, hitstop: 12, knockdown: true,
       blockstun: 22, blockKnockback: 3.4, level: 'mid', chip: 0.2, noMeter: true
     }
   }

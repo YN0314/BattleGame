@@ -3,7 +3,7 @@
   'use strict';
   window.Game = {
     Config: {},   // config/ : 調整用の数値
-    Data: {},     // data/   : ドット絵、パレットなどの素材データ
+    Data: { Sheets: {} },   // data/ : ドット絵、パレット、スプライトシートの定義(assets/*.data.js が Sheets に登録する)
     Core: {},     // core/   : 入力、ループなど、ゲームに依存しない基盤
     Logic: {},    // game/   : ゲームのルール(描画に触れない)
     Render: {},   // render/ : 描画(状態を読むだけ)

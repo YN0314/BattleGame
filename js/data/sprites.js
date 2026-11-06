@@ -40,9 +40,10 @@
   }
 
   // ---- 1ドットずつ塗る道具 ----
-  const DARK = { g: 'G', G: 'G', s: 'S', S: 'S', w: 'w' };   // 奥側の手足は暗い色にして奥行きを出す
+  const DARK = { g: 'G', G: 'G', s: 'S', S: 'S', w: 'w', t: 'T', T: 'T', x: 'x', n: 'N', N: 'N', k: 'K', K: 'K', h: 'h', b: 'b' };   // 奥側の手足は暗い色にして奥行きを出す
 
   function createRaster(pal) {
+    const lateFns = [];
     const data = new Uint8ClampedArray(W * H * 4);
     const rgb = {};
     Object.keys(pal).forEach(function (k) { rgb[k] = hexToRgb(pal[k]); });
@@ -124,13 +125,32 @@
           }
         }
       }
+      lateFns.forEach(function (fn) { fn(); });                       // 輪郭線のあとに描く効果(軌跡・衝撃マーク)
+      // 絵のある範囲だけに切り詰める(メモリと描画の節約)。足元の位置は originX / originY に持たせる
+      let x0 = W, y0 = H, x1 = -1, y1 = -1;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          if (data[(y * W + x) * 4 + 3]) {
+            if (x < x0) x0 = x; if (x > x1) x1 = x;
+            if (y < y0) y0 = y; if (y > y1) y1 = y;
+          }
+        }
+      }
+      if (x1 < 0) { x0 = y0 = 0; x1 = y1 = 0; }
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+      const crop = new Uint8ClampedArray(cw * ch * 4);
+      for (let y = 0; y < ch; y++) {
+        crop.set(data.subarray(((y0 + y) * W + x0) * 4, ((y0 + y) * W + x0 + cw) * 4), y * cw * 4);
+      }
       const cv = document.createElement('canvas');
-      cv.width = W; cv.height = H;
-      cv.getContext('2d').putImageData(new ImageData(data, W, H), 0, 0);
+      cv.width = cw; cv.height = ch;
+      cv.getContext('2d').putImageData(new ImageData(crop, cw, ch), 0, 0);
+      cv.originX = OX - x0;
+      cv.originY = OY - y0;
       return cv;
     }
 
-    return { capsule: capsule, circle: circle, shape: shape, triangle: triangle, toCanvas: toCanvas };
+    return { capsule: capsule, circle: circle, shape: shape, triangle: triangle, toCanvas: toCanvas, late: function (fn) { lateFns.push(fn); } };
   }
 
   // ---- 体のパーツ ----
@@ -150,14 +170,27 @@
     R.capsule([a[0] - 1, a[1]], toe, 2.4, 1.9, 's', 'S', 0.3, back);       // 足
   }
 
-  function drawArm(R, sh, target, bend, back) {
+  // 開いた手:手のひらから指が扇状に出る(dir = 前腕の向き)
+  function openHand(R, e, h, key, shade, back) {
+    let ux = h[0] - e[0], uy = h[1] - e[1];
+    const l = Math.hypot(ux, uy) || 1; ux /= l; uy /= l;
+    [-0.55, -0.18, 0.18, 0.55].forEach(function (a) {
+      const c = Math.cos(a), sn = Math.sin(a);
+      const dx = ux * c - uy * sn, dy = ux * sn + uy * c;
+      R.capsule(h, [h[0] + dx * 4.6, h[1] + dy * 4.6], 1.0, 0.7, key, shade, 0.3, back);
+    });
+    R.circle(h, 2.4, key, shade, 0.3, back);
+  }
+
+  function drawArm(R, sh, target, bend, back, open) {
     const r = ik(sh, target, ARM1, ARM2, bend);
     const e = r.joint, h = r.end;
     R.capsule(sh, e, 3.1, 2.8, 'g', 'G', 0.35, back);                      // 上腕(道着の袖)
     R.capsule(e, h, 2.4, 2.1, 's', 'S', 0.3, back);                        // 前腕(素肌)
     R.capsule(e, mid(e, h, 0.3), 3.0, 2.8, 'g', 'G', 0.35, back);          // 袖口
     R.capsule(mid(e, h, 0.68), mid(e, h, 0.92), 2.5, 2.5, 'w', null, 0, back);   // 手の巻き布
-    R.circle(h, 2.9, 's', 'S', 0.3, back);                                 // こぶし
+    if (open) openHand(R, e, h, 's', 'S', back);
+    else R.circle(h, 2.9, 's', 'S', 0.3, back);                            // こぶし
   }
 
   function drawTorso(R, chest, hip, head) {
@@ -184,7 +217,57 @@
     R.circle(knot, 1.8, 'b', null, 0);
   }
 
-  function drawHead(R, hd) {
+  // 表情:kind = normal / shout(気合い) / strain(食いしばり) / pain(苦悶) / guard / focus / dizzy / down
+  function drawFace(R, hx, hy, kind, shirt) {
+    const ex = hx + 3.2, ey = hy + (shirt ? 0.8 : 1.2), by = ey - (shirt ? 2.4 : 1.9);
+    kind = kind || 'normal';
+    // 眉
+    const brow = function (l, r) { R.capsule([ex - 1.1, by + l], [ex + 1.1, by + r], 0.32, 0.32, 'e', null, 0); };
+    if (kind === 'shout' || kind === 'strain' || kind === 'guard') brow(0.7, -0.6);       // 吊り上げ(鼻側が下)
+    else if (kind === 'pain') brow(-0.8, 0.5);                                           // 八の字
+    else if (kind === 'focus') brow(0.35, -0.2);
+    else if (kind === 'dizzy') brow(-0.5, 0.2);
+    else brow(0, 0);
+    // 目
+    if (kind === 'pain') {
+      R.capsule([ex - 1.3, ey - 1.0], [ex + 0.7, ey], 0.3, 0.3, 'e', null, 0);
+      R.capsule([ex - 1.3, ey + 1.0], [ex + 0.7, ey], 0.3, 0.3, 'e', null, 0);
+    } else if (kind === 'down') {
+      R.capsule([ex - 1.3, ey + 0.2], [ex + 1.2, ey + 0.2], 0.3, 0.3, 'e', null, 0);
+    } else if (kind === 'dizzy') {
+      R.shape(ex - 2, ey - 2, ex + 2, ey + 2, function (x, y) {
+        const d = Math.hypot(x - ex, y - ey);
+        return ((d <= 1.6 && d >= 1.0) || d < 0.4) ? 'e' : null;
+      });
+    } else if (kind === 'shout' || kind === 'strain' || kind === 'guard' || kind === 'focus') {
+      R.shape(ex - 1.5, ey - 0.4, ex + 1.5, ey + 0.8, function () { return 'e'; });         // 細めた目
+    } else {
+      R.shape(ex - 0.6, ey - 0.6, ex + 0.6, ey + 0.6, function () { return 'e'; });
+    }
+    // 口
+    const mx = hx + 3.8, my = hy + 3.4;
+    if (kind === 'shout' || kind === 'pain') {
+      const ry = kind === 'pain' ? 1.5 : 1.25;
+      R.shape(mx - 2, my - 2, mx + 2, my + 2, function (x, y) {
+        const u = (x - mx) / 1.5, v = (y - my) / ry;
+        return u * u + v * v <= 1 ? 'e' : null;
+      });
+    } else if (kind === 'strain' || kind === 'guard') {
+      R.shape(mx - 2, my - 2, mx + 2, my + 2, function (x, y) {   // 食いしばった歯
+        if (Math.abs(x - mx) > 1.6 || y < my - 0.9 || y > my + 0.9) return null;
+        return (y < my - 0.45 || y > my + 0.45 || Math.abs(x - mx) > 1.3) ? 'e' : 'w';
+      });
+    } else if (kind === 'dizzy') {
+      R.capsule([mx - 1.3, my], [mx - 0.2, my + 0.5], 0.3, 0.3, 'e', null, 0);
+      R.capsule([mx - 0.2, my + 0.5], [mx + 1.4, my - 0.2], 0.3, 0.3, 'e', null, 0);
+    } else if (kind === 'down') {
+      R.shape(mx - 1.2, my - 0.5, mx + 1.2, my + 0.9, function () { return 'e'; });
+    } else {
+      R.capsule([mx - 0.8, my - 0.1], [mx + 0.8, my - 0.2], 0.35, 0.35, 'S', null, 0);
+    }
+  }
+
+  function drawHead(R, hd, kind) {
     const hx = hd[0], hy = hd[1], r = 5.4;
     // 後ろに跳ねる髪と鉢巻の端は、頭より先に・後に描く
     R.capsule([hx - 3.5, hy - 4.5], [hx - 9, hy - 6.2], 1.9, 0.8, 'h', null, 0);
@@ -204,24 +287,402 @@
     R.circle([hx - 0.4, hy + 0.9], 1.3, 'S', null, 0);                                     // 耳
     R.capsule([hx - 5, hy - 1.8], [hx - 11.5, hy + 1.6], 0.95, 0.7, 'k', null, 0);        // 鉢巻の端
     R.capsule([hx - 5, hy - 1.8], [hx - 10, hy - 1.2], 0.9, 0.6, 'k', null, 0);
-    R.capsule([hx + 2.2, hy - 0.7], [hx + 4.2, hy - 0.4], 0.3, 0.3, 'e', null, 0);        // 眉(細く)
-    R.shape(hx + 2.6, hy + 0.6, hx + 3.8, hy + 1.8, function () { return 'e'; });         // 目(小さく)
     R.circle([hx + 5.4, hy + 1.2], 1.0, 's', 'S', 0.3);                                   // 鼻
-    R.capsule([hx + 3, hy + 3.3], [hx + 4.6, hy + 3.2], 0.35, 0.35, 'S', null, 0);        // 口
+    drawFace(R, hx, hy, kind, false);                                                    // 眉・目・口
   }
 
-  function paint(p, pal) {
+  // ---- ワイシャツ姿(style: 'shirt')のパーツ ----
+  function drawLegShirt(R, root, target, bend, back) {
+    const r = ik(root, target, LEG1, LEG2, bend);
+    const k = r.joint, a = r.end;
+    R.capsule(root, k, 4.9, 4.3, 't', 'T', 0.35, back);                    // 太もも(スラックス)
+    R.capsule(k, a, 4.3, 3.7, 't', 'T', 0.35, back);                       // すね(スラックス。足首まで)
+    let toe;
+    if (a[1] >= -4) {
+      toe = [a[0] + 6, a[1] + 0.2];
+    } else {
+      const ux = a[0] - k[0], uy = a[1] - k[1], l = Math.hypot(ux, uy) || 1;
+      toe = [a[0] + ux / l * 5.5, a[1] + uy / l * 5.5];
+    }
+    R.capsule([a[0] - 1, a[1]], toe, 2.7, 2.2, 'x', null, 0, back);        // 革靴
+  }
+
+  function drawArmShirt(R, sh, target, bend, back, open) {
+    const r = ik(sh, target, ARM1, ARM2, bend);
+    const e = r.joint, h = r.end;
+    R.capsule(sh, e, 3.3, 3.0, 'g', 'G', 0.35, back);                      // 上腕(シャツ)
+    R.capsule(e, mid(e, h, 0.86), 3.0, 2.5, 'g', 'G', 0.35, back);         // 前腕(長袖)
+    R.capsule(mid(e, h, 0.72), mid(e, h, 0.9), 2.6, 2.6, 'G', null, 0, back);   // 袖口(カフス)
+    if (open) openHand(R, e, h, 's', 'S', back);
+    else R.circle(h, 2.7, 's', 'S', 0.3, back);                            // 手
+  }
+
+  function drawTorsoShirt(R, chest, hip, head) {
+    const rc = 6.6, rh = 6.0;
+    const waist = mid(chest, hip, 0.72);
+    R.capsule([chest[0] + 1, chest[1] - 5], [head[0] - 0.5, head[1] + 2], 2.5, 2.5, 's', 'S', 0.3);   // 首
+    R.capsule(waist, hip, rh + 0.2, rh, 't', 'T', 0.4);                                              // 腰まわり(スラックス)
+    // シャツはズボンの中に入れる:丸い端がベルトの線より下に出ないよう、端をその分だけ胸側に寄せる
+    let tx = waist[0] - chest[0], ty0 = waist[1] - chest[1];
+    const tl = Math.hypot(tx, ty0) || 1;
+    const shirtEnd = [waist[0] - tx / tl * (rh - 0.6), waist[1] - ty0 / tl * (rh - 0.6)];
+    R.capsule(chest, shirtEnd, rc, rh, 'g', 'G', 0.45);                                              // 胴(シャツ)
+
+    // ベルトとバックル
+    let ux = hip[0] - chest[0], uy = hip[1] - chest[1];
+    const ul = Math.hypot(ux, uy) || 1;
+    ux /= ul; uy /= ul;
+    let vx = uy, vy = -ux;
+    if (vx < 0) { vx = -vx; vy = -vy; }
+    R.capsule([waist[0] - vx * 5.9, waist[1] - vy * 5.9], [waist[0] + vx * 5.9, waist[1] + vy * 5.9], 1.1, 1.1, 'b', null, 0);
+    R.shape(waist[0] + vx * 3.6 - 1.2, waist[1] + vy * 3.6 - 1.2, waist[0] + vx * 3.6 + 1.2, waist[1] + vy * 3.6 + 1.2, function () { return 'm'; });
+
+    // 襟とネクタイ
+    const ty = chest[1] - rc;
+    R.capsule([chest[0] - 0.6, ty + 0.6], [chest[0] + 2.6, ty + 1.8], 1.5, 1.4, 'g', 'G', 0.2);       // 襟(奥)
+    R.capsule([chest[0] + 5.2, ty + 0.9], [chest[0] + 3.0, ty + 2.2], 1.5, 1.3, 'g', 'G', 0.2);       // 襟(手前)
+    const kn = [chest[0] + 3.0, ty + 2.4];
+    const tipX = chest[0] + 3.6 + (waist[0] - chest[0]) * 0.55;
+    const tip = [tipX, mid(chest, waist, 0.8)[1]];
+    R.triangle([kn[0] - 2.0, kn[1] + 1], [kn[0] + 2.0, kn[1] + 1], [tip[0], tip[1]], 'n');            // ネクタイ本体
+    R.capsule([kn[0] + 0.2, kn[1] + 3], [tip[0] + 0.1, tip[1] - 2], 0.35, 0.35, 'N', null, 0);        // 柄の筋
+    R.circle(kn, 1.7, 'n', 'N', 0.2);                                                                 // 結び目
+  }
+
+  function drawHeadShirt(R, hd, kind) {
+    const hx = hd[0], hy = hd[1], r = 5.4;
+    R.shape(hx - r - 1, hy - r - 1, hx + r + 1, hy + r + 1, function (x, y) {
+      const dx = x - hx, dy = y - hy;
+      if (dx * dx + dy * dy > r * r) return null;
+      if (dy < -2.9 || (dy < -2.0 && dx < 1.2)) return 'h';        // 短い髪(上)
+      if (dx < -2.7 && dy < 2.6) return 'h';                       // 髪(後ろ・もみあげ)
+      if (dx * LX + dy * LY > r * 0.62) return 'S';                // 顔の影
+      return 's';
+    });
+    R.circle([hx - 0.4, hy + 0.9], 1.3, 'S', null, 0);                                     // 耳
+    // 眼鏡:丸いレンズの枠と、耳へのつる
+    const gx = hx + 3.0, gy = hy + 0.5;
+    R.shape(gx - 2.5, gy - 2.5, gx + 2.5, gy + 2.5, function (x, y) {
+      const d = Math.hypot(x - gx, y - gy);
+      return (d <= 2.2 && d >= 1.55) ? 'f' : null;
+    });
+    R.capsule([gx - 2.0, gy - 0.4], [hx - 0.8, hy - 0.2], 0.3, 0.3, 'f', null, 0);
+    R.circle([hx + 5.4, hy + 1.5], 1.0, 's', 'S', 0.3);                                   // 鼻
+    drawFace(R, hx, hy, kind, true);                                                     // 眉・目・口
+  }
+
+  function paintShirt(p, pal) {
+    const R = createRaster(pal);
+    const hipF = add(p.hip, 1.8, 0), hipB = add(p.hip, -1.8, 0);
+    const shF = p.shF || add(p.chest, 2.2, -3.4), shB = p.shB || add(p.chest, -2.2, -3.4);
+    drawLegShirt(R, hipB, p.ankleB, p.bendB, true);
+    drawLegShirt(R, hipF, p.ankleF, p.bendF, false);
+    drawTorsoShirt(R, p.chest, p.hip, p.head);
+    const d = p.d || {};
+    drawArmShirt(R, shB, p.handB, p.armBendB, true, d.oB);
+    drawHeadShirt(R, p.head, d.f);
+    drawArmShirt(R, shF, p.handF, p.armBendF, false, d.oF);
+    drawFx(R, p, d.fx);
+    return R.toCanvas();
+  }
+
+  // ---- 汎用の人物(style: 'casual')。髪型・服・体格を look.opts で変えて、いろいろなキャラを作る ----
+  //   opts.hair   : short / spiky / buzz / bald / long / pony / bun / buns / afro
+  //   opts.top    : long(長袖) / tee(半袖) / tank(袖なし) / bare(上半身裸) / dress(ワンピース・チャイナ服)
+  //   opts.bottom : pants / shorts / skirt(ワンピース用。素足) / none
+  //   opts.thick  : 体の太さ(1 = ふつう、1.25 = 大柄、0.9 = 細身)
+  //   opts.beard / opts.band(鉢巻) / opts.gloves(グローブ) / opts.glasses
+  // パレットのキー: s,S=肌 h=髪 g,G=上着 t,T=ズボン n,N=飾り b=ベルト x=靴 k=鉢巻・グローブ・髪留め f=眼鏡 w o c C e
+  function drawLegC(R, o, root, target, bend, back) {
+    const th = o.thick || 1, bt = o.bottom || 'pants';
+    const r = ik(root, target, LEG1, LEG2, bend), k = r.joint, a = r.end;
+    const skinLeg = (bt === 'skirt' || bt === 'none');
+    if (bt === 'pants') {
+      R.capsule(root, k, 4.7 * th, 4.0 * th, 't', 'T', 0.35, back);
+      R.capsule(k, a, 4.0 * th, 3.4 * th, 't', 'T', 0.35, back);
+    } else if (bt === 'shorts') {
+      R.capsule(root, mid(root, k, 0.9), 4.9 * th, 4.5 * th, 't', 'T', 0.35, back);
+      R.capsule(mid(root, k, 0.8), k, 4.0 * th, 3.6 * th, 's', 'S', 0.3, back);
+      R.capsule(k, mid(k, a, 0.8), 3.6 * th, 2.9 * th, 's', 'S', 0.3, back);
+      R.capsule(mid(k, a, 0.75), a, 3.3 * th, 3.0 * th, 'n', 'N', 0.25, back);       // ソックス
+    } else {
+      R.capsule(root, k, 4.2 * th, 3.5 * th, 's', 'S', 0.3, back);
+      R.capsule(k, a, 3.5 * th, 2.6 * th, 's', 'S', 0.3, back);
+    }
+    let toe;
+    if (a[1] >= -4) toe = [a[0] + 6, a[1] + 0.2];
+    else { const ux = a[0] - k[0], uy = a[1] - k[1], l = Math.hypot(ux, uy) || 1; toe = [a[0] + ux / l * 5.5, a[1] + uy / l * 5.5]; }
+    R.capsule([a[0] - 1, a[1]], toe, 2.7 * th, 2.2 * th, 'x', null, 0, back);
+    return skinLeg;
+  }
+
+  function drawArmC(R, o, sh, target, bend, back, open) {
+    const th = o.thick || 1, tp = o.top || 'long';
+    const r = ik(sh, target, ARM1, ARM2, bend), e = r.joint, h = r.end;
+    const sleeve = (tp === 'long' || tp === 'dress');
+    if (tp === 'bare' || tp === 'tank') {
+      R.capsule(sh, e, 3.3 * th, 3.0 * th, 's', 'S', 0.3, back);
+      R.capsule(e, h, 2.8 * th, 2.4 * th, 's', 'S', 0.3, back);
+    } else if (tp === 'tee') {
+      R.capsule(sh, e, 3.5 * th, 3.2 * th, 'g', 'G', 0.35, back);
+      R.capsule(e, h, 2.8 * th, 2.4 * th, 's', 'S', 0.3, back);
+    } else {
+      R.capsule(sh, e, 3.4 * th, 3.0 * th, 'g', 'G', 0.35, back);
+      R.capsule(e, mid(e, h, 0.86), 3.0 * th, 2.5 * th, 'g', 'G', 0.35, back);
+      R.capsule(mid(e, h, 0.72), mid(e, h, 0.9), 2.6 * th, 2.6 * th, 'n', null, 0, back);   // 袖口の飾り
+    }
+    if (o.gloves) {
+      R.capsule(mid(e, h, 0.55), h, 3.2 * th, 3.2 * th, 'k', null, 0, back);
+      if (open) openHand(R, e, h, 'k', null, back); else R.circle(h, 4.1 * th, 'k', 'K', 0.3, back);
+    } else if (open) openHand(R, e, h, 's', 'S', back);
+    else R.circle(h, 2.8 * th, 's', 'S', 0.3, back);
+  }
+
+  function drawTorsoC(R, o, chest, hip, head) {
+    const th = o.thick || 1, tp = o.top || 'long', bt = o.bottom || 'pants';
+    const rc = 6.3 * th, rh = 5.8 * th;
+    const waist = mid(chest, hip, 0.72);
+    R.capsule([chest[0] + 1, chest[1] - 5], [head[0] - 0.5, head[1] + 2], 2.5 * th, 2.5 * th, 's', 'S', 0.3);   // 首
+    const dress = (tp === 'dress');
+    if (!dress && bt !== 'none') R.capsule(waist, hip, rh + 0.2, rh, bt === 'skirt' ? 'g' : 't', bt === 'skirt' ? 'G' : 'T', 0.4);
+    if (dress) {                                       // ワンピース:胴からスカートまで一続き。すそは少し広がる
+      R.capsule(mid(chest, hip, 0.3), [hip[0], hip[1] + 6], rh + 0.4, rh + 1.3, 'g', 'G', 0.4);
+    }
+    let tx = waist[0] - chest[0], ty0 = waist[1] - chest[1];
+    const tl = Math.hypot(tx, ty0) || 1;
+    const shirtEnd = [waist[0] - tx / tl * (rh - 0.6), waist[1] - ty0 / tl * (rh - 0.6)];
+    const bare = (tp === 'bare');
+    R.capsule(chest, dress ? hip : shirtEnd, rc, rh, bare ? 's' : 'g', bare ? 'S' : 'G', 0.45);
+    let ux = hip[0] - chest[0], uy = hip[1] - chest[1];
+    const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+    let vx = uy, vy = -ux; if (vx < 0) { vx = -vx; vy = -vy; }
+    if (bare) {                                         // 胸と腹の陰影
+      R.capsule([chest[0] + 1.5, chest[1] - 1], [chest[0] + 4.2, chest[1] - 1], 2.0, 2.0, 'S', null, 0);
+      R.capsule([waist[0] + 1.5, waist[1] - 3], [waist[0] + 3.2, waist[1] - 3], 1.0, 1.0, 'S', null, 0);
+    }
+    if (bt !== 'skirt' && !dress) R.capsule([waist[0] - vx * 5.9 * th, waist[1] - vy * 5.9 * th], [waist[0] + vx * 5.9 * th, waist[1] + vy * 5.9 * th], 1.2, 1.2, 'b', null, 0);
+    if (dress) R.capsule([waist[0] - vx * 5.6, waist[1] - vy * 5.6], [waist[0] + vx * 5.6, waist[1] + vy * 5.6], 1.2, 1.2, 'n', null, 0);   // 帯
+    // 襟元:飾り(ストライプ/縁取り)
+    const ty = chest[1] - rc;
+    if (tp === 'dress') R.capsule([chest[0] + 3.4, ty + 1.2], mid(chest, hip, 0.95), 0.9, 0.9, 'n', null, 0);   // チャイナ服の合わせ
+    else if (tp === 'tank') {                                                                                // 肩ひもの縁
+      R.capsule([chest[0] - 2.5, ty + 0.8], [chest[0] + 4.8, ty + 0.8], 1.0, 1.0, 'n', null, 0);
+    } else if (tp === 'long' || tp === 'tee') R.capsule([chest[0] + 0.2, ty + 0.9], [chest[0] + 5.0, ty + 0.9], 1.1, 1.1, 'n', null, 0);
+  }
+
+  function drawHeadC(R, o, hd, kind) {
+    const hx = hd[0], hy = hd[1], r = 5.4, hair = o.hair || 'short';
+    // 頭の後ろ側(先に描く)
+    if (hair === 'afro') R.circle([hx - 1.2, hy - 2.6], 7.8, 'h', 'h', 0);
+    if (hair === 'long') R.capsule([hx - 2.6, hy - 3.5], [hx - 6.5, hy + 12], 4.4, 3.0, 'h', null, 0);
+    if (hair === 'pony') {
+      R.capsule([hx - 3.5, hy - 3.8], [hx - 10.5, hy + 1.2], 2.2, 1.5, 'h', null, 0);
+      R.capsule([hx - 10.5, hy + 1.2], [hx - 12.5, hy + 8.5], 1.6, 0.8, 'h', null, 0);
+    }
+    if (hair === 'spiky') {
+      R.capsule([hx - 3.5, hy - 4.5], [hx - 9, hy - 6.2], 1.9, 0.8, 'h', null, 0);
+      R.capsule([hx - 1, hy - 5.2], [hx - 3.4, hy - 9.2], 1.7, 0.7, 'h', null, 0);
+      R.capsule([hx + 1.6, hy - 5.2], [hx + 2.6, hy - 8.6], 1.5, 0.6, 'h', null, 0);
+    }
+    if (hair === 'bun' || hair === 'buns') {
+      R.circle([hx - 2.2, hy - 6.4], 3.0, 'h', null, 0);
+      if (hair === 'buns') R.circle([hx + 2.6, hy - 6.2], 2.6, 'h', null, 0);
+    }
+    const cap = { short: 2.9, spiky: 2.6, buzz: 3.7, bald: -9, long: 2.9, pony: 2.8, bun: 2.8, buns: 2.8, afro: 3.4 }[hair];
+    R.shape(hx - r - 1, hy - r - 1, hx + r + 1, hy + r + 1, function (x, y) {
+      const dx = x - hx, dy = y - hy;
+      if (dx * dx + dy * dy > r * r) return null;
+      if (dy < -cap || (hair === 'short' && dy < -2.0 && dx < 1.2)) return 'h';
+      if (o.band && dy <= -1.1) return 'k';
+      if (hair !== 'bald' && hair !== 'buzz' && dx < -2.8 && dy < 2.6) return 'h';
+      if (hair === 'buzz' && dx < -3.6 && dy < 1.2) return 'h';
+      if (o.beard && dy > 2.4 + Math.max(0, -dx - 2) * 0.4 && dx > -3.2) return 'h';     // あごひげ
+      if (dx * LX + dy * LY > r * 0.62) return 'S';
+      return 's';
+    });
+    if (hair === 'long' || hair === 'buns' || hair === 'bun') R.capsule([hx - 4.6, hy - 3], [hx - 3.4, hy + 3.4], 1.4, 1.2, 'h', null, 0);   // 横の髪
+    if (o.band) {
+      R.capsule([hx - 5, hy - 1.8], [hx - 11.5, hy + 1.6], 0.95, 0.7, 'k', null, 0);
+      R.capsule([hx - 5, hy - 1.8], [hx - 10, hy - 1.2], 0.9, 0.6, 'k', null, 0);
+    }
+    if (hair === 'pony') R.circle([hx - 6.8, hy - 2.3], 1.2, 'k', null, 0);              // 髪留め
+    R.circle([hx - 0.4, hy + 0.9], 1.3, 'S', null, 0);                                   // 耳
+    if (o.glasses) {
+      const gx = hx + 3.0, gy = hy + 0.5;
+      R.shape(gx - 2.5, gy - 2.5, gx + 2.5, gy + 2.5, function (x, y) { const d = Math.hypot(x - gx, y - gy); return (d <= 2.2 && d >= 1.55) ? 'f' : null; });
+    }
+    R.circle([hx + 5.4, hy + 1.3], 1.0, 's', 'S', 0.3);                                  // 鼻
+    drawFace(R, hx, hy, kind, true);
+    if (o.lips) R.capsule([hx + 3.0, hy + 3.5], [hx + 4.6, hy + 3.4], 0.5, 0.5, 'K', null, 0);   // 口紅
+    if (o.mark) R.circle([hx + 4.8, hy - 1.7], 0.6, 'n', null, 0);                         // 額の印
+  }
+
+  function paintCasual(p, pal, o) {
+    o = o || {};
+    const R = createRaster(pal);
+    const hipF = add(p.hip, 1.8, 0), hipB = add(p.hip, -1.8, 0);
+    const shF = p.shF || add(p.chest, 2.2, -3.4), shB = p.shB || add(p.chest, -2.2, -3.4);
+    drawLegC(R, o, hipB, p.ankleB, p.bendB, true);
+    drawLegC(R, o, hipF, p.ankleF, p.bendF, false);
+    drawTorsoC(R, o, p.chest, p.hip, p.head);
+    const d = p.d || {};
+    drawArmC(R, o, shB, p.handB, p.armBendB, true, d.oB);
+    drawHeadC(R, o, p.head, d.f);
+    drawArmC(R, o, shF, p.handF, p.armBendF, false, d.oF);
+    drawFx(R, p, d.fx);
+    return R.toCanvas();
+  }
+
+  function paint(p, pal, style, opts) {
+    if (style === 'casual') return paintCasual(p, pal, opts);
+    if (style === 'shirt') return paintShirt(p, pal);
     const R = createRaster(pal);
     const hipF = add(p.hip, 1.8, 0), hipB = add(p.hip, -1.8, 0);
     const shF = p.shF || add(p.chest, 2.2, -3.4), shB = p.shB || add(p.chest, -2.2, -3.4);
     drawLeg(R, hipB, p.ankleB, p.bendB, true);
     drawLeg(R, hipF, p.ankleF, p.bendF, false);
     drawTorso(R, p.chest, p.hip, p.head);
-    drawArm(R, shB, p.handB, p.armBendB, true);
-    drawHead(R, p.head);
-    drawArm(R, shF, p.handF, p.armBendF, false);
+    const d = p.d || {};
+    drawArm(R, shB, p.handB, p.armBendB, true, d.oB);
+    drawHead(R, p.head, d.f);
+    drawArm(R, shF, p.handF, p.armBendF, false, d.oF);
+    drawFx(R, p, d.fx);
     return R.toCanvas();
   }
+
+  // ---- 打撃の軌跡・衝撃マークなど(輪郭線のあとに白で重ねる) ----
+  function drawFx(R, p, fx) {
+    if (!fx) return;
+    R.late(function () {
+      const W1 = 'w';
+      const line = function (a, b, r0, r1) { R.capsule(a, b, r0, r1, W1, null, 0); };
+      // 点 c から、角度 ang(ラジアン)の向きの反対へ流れる筋を複数本
+      const streaks = function (c, dirx, diry, len, n, spread) {
+        for (let i = 0; i < n; i++) {
+          const o = (i - (n - 1) / 2) * spread;
+          const sx = c[0] - dirx * 3 - diry * o, sy = c[1] - diry * 3 + dirx * o;
+          const l = len * (1 - Math.abs(i - (n - 1) / 2) * 0.25);
+          line([sx, sy], [sx - dirx * l, sy - diry * l], 0.55, 0.12);
+        }
+      };
+      fx.forEach(function (name) {
+        if (name === 'punch') streaks(p.handF, 1, 0, 11, 3, 2.6);
+        else if (name === 'punchLow') streaks(p.handF, 1, 0.08, 11, 3, 2.6);
+        else if (name === 'kick') {
+          const dx = p.ankleF[0] - p.hip[0], dy = p.ankleF[1] - p.hip[1], l = Math.hypot(dx, dy) || 1;
+          streaks(p.ankleF, dx / l, dy / l, 12, 3, 2.4);
+        } else if (name === 'rise') {                     // 昇竜:上昇の筋(足元から)
+          [-5, -1.5, 2.5, 6].forEach(function (ox, i) {
+            const y0 = p.ankleF[1] + 4 + (i % 2) * 3;
+            line([p.hip[0] + ox, y0], [p.hip[0] + ox, y0 + 11 - (i % 2) * 3], 0.5, 0.1);
+          });
+        } else if (name === 'crescent') {                 // サマーソルト:三日月の軌跡
+          const c = [p.hip[0] + 7, p.hip[1] - 12];
+          let prev = null;
+          for (let i = 0; i <= 8; i++) {
+            const a = -2.2 + i * 0.5;
+            const pt = [c[0] + Math.cos(a) * 17, c[1] + Math.sin(a) * 17];
+            if (prev) line(prev, pt, 0.2 + 0.65 * Math.sin(Math.PI * i / 8), 0.2 + 0.65 * Math.sin(Math.PI * (i + 1) / 8));
+            prev = pt;
+          }
+        } else if (name === 'ki') {                       // 波動:手の先の気の光
+          const c = [p.handF[0] + 5, p.handF[1]];
+          R.circle(c, 3.2, W1, null, 0);
+          R.circle(c, 1.7, 's', null, 0);
+          for (let i = 0; i < 6; i++) {
+            const a = i * Math.PI / 3 + 0.3;
+            line([c[0] + Math.cos(a) * 4.2, c[1] + Math.sin(a) * 4.2], [c[0] + Math.cos(a) * 7.5, c[1] + Math.sin(a) * 7.5], 0.5, 0.1);
+          }
+        } else if (name === 'caseHeld') {                 // 振りかぶったカバン(茶色・持ち手・留め金)
+          const c = p.handF;
+          R.shape(c[0] - 7, c[1] - 8, c[0] + 7, c[1] + 6, function (x, y) {
+            const ax = Math.abs(x - c[0]), ay = y - c[1];
+            if (ay >= -3.4 && ay <= 3.8 && ax <= 6.4) {          // 本体
+              if (ax > 5.6 || ay < -2.8 || ay > 3.2) return 'o';
+              return ay < -0.6 ? 'c' : 'C';
+            }
+            if (ay >= -6.6 && ay < -3.4 && ax >= 1.5 && ax <= 3.1) return (ax > 2.4 || ax < 2.0) ? 'o' : null;   // 持ち手
+            if (ay >= -6.6 && ay < -5.8 && ax <= 3.1 && ax >= 1.5) return 'o';
+            return null;
+          });
+          R.shape(c[0] - 1, c[1] - 0.6, c[0] + 1, c[1] + 1, function () { return 'w'; });                          // 留め金
+        } else if (name === 'paperHeld') {                // 手にした書類の束
+          const c = p.handF;
+          [[0, 0], [1.5, -1.2], [3, -2.4]].forEach(function (o) {
+            R.shape(c[0] + o[0] - 4, c[1] + o[1] - 5, c[0] + o[0] + 4, c[1] + o[1] + 5, function (x, y) {
+              const ax = Math.abs(x - (c[0] + o[0])), ay = Math.abs(y - (c[1] + o[1]));
+              if (ax > 3.4 || ay > 4.4) return null;
+              return (ax > 2.8 || ay > 3.8) ? 'o' : 'w';
+            });
+          });
+        } else if (name === 'papers') {                   // 撒き散らされる書類
+          [[8, -9, 0.3], [14, 2, -0.4], [-2, -12, -0.2], [20, -6, 0.5], [4, 6, 0.1], [24, 4, -0.3]].forEach(function (o) {
+            const cx = p.chest[0] + o[0], cy = p.chest[1] + o[1];
+            R.shape(cx - 4, cy - 4, cx + 4, cy + 4, function (x, y) {
+              const u = (x - cx) * Math.cos(o[2]) + (y - cy) * Math.sin(o[2]);
+              const v = -(x - cx) * Math.sin(o[2]) + (y - cy) * Math.cos(o[2]);
+              if (Math.abs(u) > 2.8 || Math.abs(v) > 3.4) return null;
+              return (Math.abs(u) > 2.2 || Math.abs(v) > 2.8) ? 'o' : 'w';
+            });
+          });
+        } else if (name === 'charge') {                   // ため:手元に集まる光の粒
+          [[-5, -4], [3, -6], [-1, 4], [6, 2]].forEach(function (o) {
+            R.circle([p.handF[0] + o[0], p.handF[1] + o[1]], 0.7, W1, null, 0);
+          });
+          R.circle(p.handF, 1.5, W1, null, 0);
+        } else if (name === 'impact') {                   // 被弾:胸元の衝撃マーク
+          const c = [p.chest[0] + 8, p.chest[1] - 1];
+          for (let i = 0; i < 5; i++) {
+            const a = -1.0 + i * 0.5;
+            line([c[0] + Math.cos(a) * 2, c[1] + Math.sin(a) * 2], [c[0] + Math.cos(a) * 6.5, c[1] + Math.sin(a) * 6.5], 0.55, 0.1);
+          }
+        } else if (name === 'sweat') {                    // 汗のしずく
+          const hx = p.head[0] - 5, hy = p.head[1] - 5;
+          R.circle([hx, hy + 1], 0.9, W1, null, 0);
+          R.circle([hx + 1.5, hy - 4], 0.6, W1, null, 0);
+          line([hx + 0.2, hy - 0.6], [hx + 0.9, hy - 3], 0.3, 0.05);
+        } else if (name === 'dust') {                     // ダウン:土ぼこり
+          [[-10, 0, 2.2], [-4, -2, 1.7], [22, -1, 2.0], [28, 0, 1.4]].forEach(function (o) {
+            R.circle([p.hip[0] + o[0], -2 + o[1]], o[2], W1, null, 0);
+          });
+        } else if (name === 'grab') {                     // 投げ:つかむ手の力線
+          line([p.handF[0] + 3, p.handF[1] - 5], [p.handF[0] + 6, p.handF[1] - 8], 0.5, 0.1);
+          line([p.handF[0] + 4, p.handF[1] + 5], [p.handF[0] + 7, p.handF[1] + 8], 0.5, 0.1);
+        } else if (name === 'slamfx') {                   // 叩きつけ:地面の衝撃
+          for (let i = 0; i < 4; i++) {
+            const a = -2.9 + i * 0.6;
+            line([p.handF[0] + 3 + Math.cos(a) * 3, -1 + Math.sin(a) * 2], [p.handF[0] + 3 + Math.cos(a) * 12, -1 + Math.sin(a) * 9], 0.7, 0.1);
+          }
+        }
+      });
+    });
+  }
+
+  // ポーズごとの描き分け:コマごとに { f: 表情, oF/oB: 手を開く, fx: 効果 }
+  // 書かなかったコマは、普通の顔・握りこぶし・効果なし
+  const DETAIL = {
+    idle:        [{}, {}, {}, {}],
+    standPunch:  [{ f: 'focus' }, { f: 'shout', fx: ['punch'] }, { f: 'focus' }],
+    standKick:   [{ f: 'focus' }, { f: 'shout', fx: ['kick'] }, { f: 'focus' }],
+    crouchPunch: [{ f: 'focus' }, { f: 'shout', fx: ['punchLow'] }, { f: 'focus' }],
+    crouchKick:  [{ f: 'focus' }, { f: 'shout', fx: ['kick'] }, { f: 'focus' }],
+    jumpPunch:   [{ f: 'focus' }, { f: 'shout', fx: ['punch'] }, { f: 'shout', fx: ['punch'] }],
+    jumpKick:    [{ f: 'focus' }, { f: 'shout', fx: ['kick'] }, { f: 'shout', fx: ['kick'] }],
+    paperToss:   [{ f: 'focus', fx: ['paperHeld'] }, { f: 'shout', oF: true, fx: ['punch'] }, { f: 'focus' }],
+    briefcase:   [{ f: 'strain', fx: ['caseHeld'] }, { f: 'shout', oF: true, oB: true }, { f: 'focus' }],
+    overtime:    [{ f: 'strain', fx: ['paperHeld'] }, { f: 'shout', oF: true, oB: true, fx: ['papers'] }, { f: 'shout', oF: true, oB: true, fx: ['papers'] }],
+    fireball:    [{ f: 'focus', oF: true, oB: true, fx: ['charge'] }, { f: 'shout', oF: true, oB: true, fx: ['ki'] }, { f: 'shout', oF: true, oB: true, fx: ['ki'] }],
+    uppercut:    [{ f: 'focus' }, { f: 'shout', fx: ['rise'] }, { f: 'strain', fx: ['rise'] }],
+    uppercutLand:[{ f: 'strain' }],
+    flashkick:   [{ f: 'focus' }, { f: 'shout', fx: ['crescent'] }, { f: 'strain' }],
+    throw:       [{ f: 'strain', oF: true, oB: true, fx: ['grab'] }, { f: 'shout', oF: true, oB: true }, { f: 'focus' }],
+    slam:        [{ f: 'strain', oF: true, oB: true, fx: ['grab'] }, { f: 'shout', oF: true, oB: true }, { f: 'shout', oF: true, oB: true, fx: ['slamfx'] }, { f: 'focus' }],
+    guard:       [{ f: 'guard' }],
+    crouchGuard: [{ f: 'guard' }],
+    dizzy:       [{ f: 'dizzy', oF: true, oB: true }, { f: 'dizzy', oF: true, oB: true }, { f: 'dizzy', oF: true, oB: true }, { f: 'dizzy', oF: true, oB: true }],
+    hit:         [{ f: 'pain', oF: true, oB: true, fx: ['impact', 'sweat'] }],
+    down:        [{ f: 'down', oF: true, oB: true, fx: ['dust'] }]
+  };
 
   // ---- ポーズ(関節の位置) ----
   const STAND = {
@@ -317,6 +778,36 @@
       return [charge, shoot, shoot];
     })(),
 
+    // 書類ばらまき:書類を持った腕を体の前へ引く → 横に振り抜く → 戻す
+    paperToss: (function () {
+      const base = { hip: [-1, -22], ankleF: [10, GY], ankleB: [-10, GY] };
+      return [
+        mk(Object.assign({}, base, { chest: [-2, -33], head: [0, -43], handF: [-3, -35], handB: [5, -31] })),
+        mk(Object.assign({}, base, { chest: [4, -33], head: [6, -43], handF: [24, -39], handB: [-2, -30], ankleF: [11, GY] })),
+        mk(Object.assign({}, base, { chest: [3, -33], head: [5, -43], handF: [17, -36], handB: [3, -31] }))
+      ];
+    })(),
+
+    // カバン投げ:カバンを頭の後ろへ振りかぶる → 体ごと前へ投げ出す → 前かがみで残心
+    briefcase: (function () {
+      const base = { hip: [-1, -22], ankleB: [-10, GY] };
+      return [
+        mk(Object.assign({}, base, { chest: [-4, -33], head: [-3, -43], handF: [-10, -52], handB: [-3, -48], ankleF: [8, GY] })),
+        mk(Object.assign({}, base, { hip: [0, -22], chest: [6, -31], head: [9, -40], handF: [23, -29], handB: [18, -33], ankleF: [13, GY] })),
+        mk(Object.assign({}, base, { hip: [0, -21], chest: [7, -29], head: [10, -38], handF: [19, -24], handB: [13, -27], ankleF: [13, GY] }))
+      ];
+    })(),
+
+    // 残業突入(超必殺技):書類を腰の後ろへ溜める → 両腕を大きく広げて撒き散らす → 前へ突き出す
+    overtime: (function () {
+      const base = { hip: [-1, -22], ankleF: [10, GY], ankleB: [-10, GY] };
+      return [
+        mk(Object.assign({}, base, { hip: [-2, -20], chest: [-3, -31], head: [-1, -41], handF: [-8, -22], handB: [-10, -24] })),
+        mk(Object.assign({}, base, { chest: [2, -35], head: [4, -45], handF: [16, -54], handB: [-4, -53] })),
+        mk(Object.assign({}, base, { chest: [5, -32], head: [7, -42], handF: [23, -38], handB: [19, -36] }))
+      ];
+    })(),
+
     // 昇竜拳風:身をかがめる → 拳を突き上げて上昇 → 落ちてくる
     uppercut: [
       mk({ hip: [-2, -16], chest: [0, -26], head: [3, -35], handF: [6, -26], handB: [3, -24], ankleF: [9, GY], ankleB: [-10, GY] }),
@@ -363,6 +854,14 @@
       mk(Object.assign({}, CROUCH, { handF: [10, -28.5], handB: [7, -25.5] }))
     ],
 
+    // 気絶:ふらふら揺れる
+    dizzy: [-4, -1, 2, -1].map(function (sx) {
+      return mk({
+        head: [3 + sx, -40], chest: [1 + sx * 0.7, -31], hip: [-1, -22],
+        handF: [8, -22], handB: [4, -23], ankleF: [8, GY], ankleB: [-8, GY]
+      });
+    }),
+
     // やられ:のけぞる
     hit: [
       mk({
@@ -381,6 +880,93 @@
     ]
   };
 
+  // ---- ポーズの補間(中間コマ)----
+  const KEYS = ['head', 'chest', 'hip', 'handF', 'handB', 'ankleF', 'ankleB', 'shF', 'shB'];
+  const LOOPING = ['idle', 'walk', 'dizzy'];
+
+  function blendPose(A, B, t) {
+    const o = Object.assign({}, t < 0.5 ? A : B);          // 曲がる向きなどは近いほうに合わせる
+    KEYS.forEach(function (k) {
+      if (A[k] && B[k]) o[k] = [A[k][0] + (B[k][0] - A[k][0]) * t, A[k][1] + (B[k][1] - A[k][1]) * t];
+    });
+    return o;
+  }
+
+  // frame は小数でもよい(2.4 = 2コマ目と3コマ目の間)。中間は tweenSteps 段階に丸める。
+  // 戻り値 { a: コマ番号, step: 中間の段階(0〜), t: 0〜1, blend: 補間したポーズ または 元のポーズ }
+  function resolvePose(name, frame) {
+    const list = poses[name];
+    const n = list.length;
+    const Q = Math.max(1, (Game.Config.display.anim && Game.Config.display.anim.tweenSteps) || 1);
+    const loop = LOOPING.indexOf(name) >= 0;
+    let fi = Math.floor(frame), step = Math.round((frame - fi) * Q);
+    if (step >= Q) { fi += 1; step = 0; }
+    let a, b;
+    if (loop) { a = ((fi % n) + n) % n; b = (a + 1) % n; }
+    else { a = Math.max(0, Math.min(fi, n - 1)); b = Math.min(a + 1, n - 1); if (a === n - 1) step = 0; }
+    const t = step / Q;
+    return { a: a, step: step, t: t, pose: t > 0 && a !== b ? blendPose(list[a], list[b], t) : list[a] };
+  }
+
+  // ---- 画像(スプライトシート)----
+  // Game.Data.Sheets[name] = { image: 'パス' または ['1P用', '2P用'], artScale: 絵の1ドットが何分の1単位か(2なら絵のドット2個で1単位),
+  //   loop: ['idle', 'walk', ...](繰り返すポーズ。ほかは最後のコマで止まる),
+  //   frames: { ポーズ名: [ { x, y, w, h, ox, oy, hurt? }, ... ] } }
+  //   x,y,w,h = 画像内の切り出し範囲 / ox,oy = その範囲の中での足元の位置(絵のドット単位)
+  //   hurt = 喰らい判定の箱 [[x0,y0,x1,y1], ...](ゲーム内の単位。足元が原点、右向き。省略するとポーズの関節から自動で作る)
+  const sheetImgs = {};                 // look名 → [Image or null, ...]
+  const SHEET_LOOP = ['idle', 'walk', 'dizzy'];
+
+  function sheetFrame(lk, name, frame) {
+    const L = Game.Data.Looks[lk];
+    const def = Game.Data.Sheets[L.sheet];
+    const list = def && def.frames && def.frames[name];
+    if (!list || !list.length) return null;
+    const loop = (def.loop || SHEET_LOOP).indexOf(name) >= 0;
+    frame = Math.floor(frame);                           // 中間コマ(小数)は持たないので、整数のコマに丸める
+    const f = loop ? ((frame % list.length) + list.length) % list.length : Math.max(0, Math.min(frame, list.length - 1));
+    return { def: def, fr: list[f], index: f };
+  }
+
+  // 切り出した絵を、ゲームの細かさ(pixelScale)に合わせて拡大した画像にする(ドットはぼかさない)
+  function paintSheet(lk, name, frame, palette) {
+    const imgs = sheetImgs[lk];
+    const img = imgs && (imgs[palette] || imgs[0]);
+    const sf = sheetFrame(lk, name, frame);
+    if (!img || !sf) return null;
+    const k = RES / (sf.def.artScale || 1);
+    const fr = sf.fr;
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(fr.w * k)); cv.height = Math.max(1, Math.round(fr.h * k));
+    const cx = cv.getContext('2d');
+    cx.imageSmoothingEnabled = false;
+    cx.drawImage(img, fr.x, fr.y, fr.w, fr.h, 0, 0, cv.width, cv.height);
+    cv.originX = Math.round(fr.ox * k);
+    cv.originY = Math.round(fr.oy * k);
+    return cv;
+  }
+
+  function loadSheets() {
+    const jobs = [];
+    Object.keys(Game.Data.Looks).forEach(function (lk) {
+      const L = Game.Data.Looks[lk];
+      if (L.style !== 'sheet') return;
+      const def = Game.Data.Sheets[L.sheet];
+      if (!def) { console.warn('スプライトシートの定義がありません: ' + L.sheet); sheetImgs[lk] = []; return; }
+      const srcs = Array.isArray(def.image) ? def.image : [def.image];
+      sheetImgs[lk] = [];
+      srcs.forEach(function (src, i) {
+        jobs.push(new Promise(function (resolve) {
+          const im = new Image();
+          im.onload = function () { sheetImgs[lk][i] = im; resolve(); };
+          im.onerror = function () { console.warn('スプライトシートの画像を読み込めません: ' + src); resolve(); };
+          im.src = src;
+        }));
+      });
+    });
+    return Promise.all(jobs);
+  }
+
   // ---- 取り出し口 ----
   const cache = {};
   Game.Data.Sprites = {
@@ -388,22 +974,86 @@
     originY: OY,
     scale: RES,        // ゲーム内の1単位が画像の何マスか
     // name: ポーズ名, frame: 連番, palette: 0(1P) / 1(2P)
-    get: function (name, frame, palette) {
-      const list = poses[name];
-      const f = ((frame % list.length) + list.length) % list.length;
-      const key = name + ':' + f + ':' + palette;
-      if (!cache[key]) cache[key] = paint(list[f], Game.Data.Palettes[palette]);
+    get: function (name, frame, palette, look) {
+      let lk = look || 'hero';
+      let L = Game.Data.Looks[lk] || Game.Data.Looks.hero;
+      if (L.style === 'sheet') {
+        const fl = Math.floor(frame);                // 画像の見た目は中間コマを持たない
+        const key0 = lk + ':' + name + ':' + fl + ':' + palette;
+        if (cache[key0] === undefined) cache[key0] = paintSheet(lk, name, fl, palette) || null;
+        if (cache[key0]) return cache[key0];
+        lk = L.fallback || 'hero';                 // 画像がない・そのポーズが定義されていないときは自動生成の絵
+        L = Game.Data.Looks[lk];
+      }
+      const rp = resolvePose(name, frame);
+      const key = lk + ':' + name + ':' + rp.a + '.' + rp.step + ':' + palette;
+      if (!cache[key]) {
+        const dl = DETAIL[name];
+        const di = rp.t < 0.5 ? rp.a : Math.min(rp.a + 1, poses[name].length - 1);   // 中間コマは近いほうの描き分けを使う
+        const pose = dl ? Object.assign({}, rp.pose, { d: dl[di] || dl[rp.a] || {} }) : rp.pose;
+        cache[key] = paint(pose, L.palettes[palette], L.style, L.opts);
+      }
       return cache[key];
     },
     // 全コマを先に描き起こしておく(初めて技を出した瞬間のカクつきを防ぐ)
+    // 戻り値:画像の読み込みが終わると解決する Promise(画像のない見た目だけなら、すぐ解決)
     preload: function () {
       const self = this;
       const L = self.list();
       Object.keys(L).forEach(function (name) {
         for (let f = 0; f < L[name]; f++) {
-          for (let p = 0; p < Game.Data.Palettes.length; p++) self.get(name, f, p);
+          Object.keys(Game.Data.Looks).forEach(function (lk) {
+            if (Game.Data.Looks[lk].style === 'sheet') return;
+            for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) self.get(name, f, p, lk);
+          });
         }
       });
+      return loadSheets().then(function () {
+        Object.keys(Game.Data.Looks).forEach(function (lk) {
+          if (Game.Data.Looks[lk].style !== 'sheet') return;
+          Object.keys(L).forEach(function (name) {
+            for (let f = 0; f < L[name]; f++) {
+              for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) self.get(name, f, p, lk);
+            }
+          });
+        });
+      });
+    },
+    // 中間コマを、画面を止めないよう少しずつ先に作っておく(ゲーム開始後に呼ぶ。間に合わないコマは使うときに作られる)
+    warm: function () {
+      const self = this;
+      const L = self.list();
+      const Q = Math.max(1, (Game.Config.display.anim && Game.Config.display.anim.tweenSteps) || 1);
+      const jobs = [];
+      Object.keys(L).forEach(function (name) {
+        for (let f = 0; f < L[name]; f++) {
+          for (let s = 1; s < Q; s++) {
+            if (L[name] === 1) break;
+            Object.keys(Game.Data.Looks).forEach(function (lk) {
+              if (Game.Data.Looks[lk].style === 'sheet') return;
+              for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) jobs.push([name, f + s / Q, p, lk]);
+            });
+          }
+        }
+      });
+      let i = 0;
+      (function tick() {
+        const end = performance.now() + 6;                  // 1回に使う時間は約6ms(1フレームを邪魔しない)
+        while (i < jobs.length && performance.now() < end) { self.get.apply(self, jobs[i++]); }
+        if (i < jobs.length) setTimeout(tick, 0);
+      })();
+    },
+    // 画像の見た目で、そのコマに喰らい判定が定義されていればその箱 [[x0,y0,x1,y1],...]、なければ null
+    hurtBoxes: function (look, name, frame) {
+      const L = Game.Data.Looks[look];
+      if (!L || L.style !== 'sheet') return null;
+      const sf = sheetFrame(look, name, frame);
+      return sf && sf.fr.hurt ? sf.fr.hurt : null;
+    },
+    // 判定用:ポーズの関節位置(原点は足元、右向き)。なければ null
+    joints: function (name, frame) {
+      if (!poses[name]) return null;
+      return resolvePose(name, frame).pose;
     },
     // 確認用:{ポーズ名: コマ数}
     list: function () {

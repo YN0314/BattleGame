@@ -19,6 +19,7 @@
     fighters: [],
     hitstop: 0,         // ヒットストップの残りフレーム
     flash: null,        // 超必殺技の発動演出 { frame, len, title, owner }
+    combo: null,        // コンボ表示 { owner, hits, damage, timer }
     phase: 'intro',
     phaseFrame: 0,      // 現在のphaseに入ってからの経過フレーム
     roundNo: 1,
@@ -27,12 +28,13 @@
     winner: -1,         // そのラウンドの勝者(0:1P / 1:2P / -1:引き分け)
     reason: 'ko',       // ラウンドの終わり方('ko' | 'time')
     matchWinner: -1,    // 試合の勝者(result中のみ有効)
-    menuItems: ['REMATCH', 'TITLE'],
+    menuItems: ['REMATCH', 'CHARACTER SELECT', 'TITLE'],
     menuIndex: 0,
 
     // 試合の開始(タイトルなどから呼ばれる)
     enter: function (params) {
       this.params = params || { mode: '2p' };
+      if (this.params.stage) Game.Render.Renderer.setStage(this.params.stage);        // キャラ選択で決まったステージ
       this.wins = [0, 0];
       this.roundNo = 1;
       this.matchWinner = -1;
@@ -54,6 +56,7 @@
       ];
       this.fighters.forEach(function (fi, i) { fi.meter = prevMeter[i] || 0; });
       this.flash = null;
+      this.combo = null;
       Game.Logic.Projectile.reset();
       Game.Core.InputHistory.reset();
       Game.Render.Effects.reset();
@@ -96,6 +99,7 @@
           Game.Core.Sound.play('guard');
           fi.techEvent = null;
         }
+        if (fi.dizzyEvent) { fi.dizzyEvent = false; Game.Core.Sound.play('hitHeavy'); }   // 気絶
         const before = fi.chargeReady.length;             // ため完了の表示と合図
         fi.chargeReady = resolve ? fi.chargeStatus() : [];
         if (fi.chargeReady.length > before) Game.Core.Sound.play('charge');
@@ -126,6 +130,7 @@
           return;
         }
         Battle.gainMeter(h);
+        if (!h.blocked) Battle.noteCombo(h);
         if (h.blocked) {
           // ガード:止まる時間は短め、画面は揺らさない
           Battle.hitstop = Math.max(Battle.hitstop, Math.max(3, h.move.hitstop - 2));
@@ -146,6 +151,13 @@
       this.flash = { frame: 0, len: len, title: ev.move.title || 'SUPER', owner: ev.owner.index };
       this.hitstop = Math.max(this.hitstop, len);
       Game.Core.Sound.play('super');
+    },
+
+    // コンボ表示の更新:2発以上つながったら出す
+    noteCombo: function (h) {
+      const d = h.defender;
+      if (d.comboHits < 2) return;
+      this.combo = { owner: h.attacker.index, hits: d.comboHits, damage: d.comboDamage, timer: Game.Config.combat.comboShowFrames };
     },
 
     // 技が当たった・ガードされたときのゲージ増加
@@ -218,6 +230,7 @@
 
       Game.Render.Effects.update();
       if (this.flash && ++this.flash.frame >= this.flash.len) this.flash = null;
+      if (this.combo && --this.combo.timer <= 0) this.combo = null;
       // ヒットストップ中は入力の読み取りも止める(止まっている間の押下が失われないように)
       if (this.hitstop > 0) {
         this.hitstop--;
@@ -265,6 +278,7 @@
       if (nav.confirm) {
         Game.Core.Sound.play('ok');
         if (this.menuIndex === 0) this.enter(this.params);
+        else if (this.menuIndex === 1) Game.Core.SceneManager.go('select', { mode: this.params.mode, level: this.params.level });
         else Game.Core.SceneManager.go('title');
       }
     },
