@@ -62,7 +62,7 @@ Game.Config.characters = {
       jumpPunch: 'jumpPunch', jumpKick: 'jumpKick',
       throw: 'throw'
     },
-    specials: ['superfireball', 'flashkick', 'fireball'],
+    specials: ['superfireball', 'flyKick', 'flashkick', 'fireball'],
     overrides: { standKick: { damage: 9 }, flashkick: { damage: 13 }, standPunch: { damage: 6 } }
   },
 
@@ -78,7 +78,7 @@ Game.Config.characters = {
       jumpPunch: 'jumpPunch', jumpKick: 'jumpKick',
       throw: 'throw'
     },
-    specials: ['superfireball', 'slam', 'uppercut'],
+    specials: ['superfireball', 'slam', 'uppercut', 'tackle'],
     overrides: { standPunch: { damage: 10 }, standKick: { damage: 11 }, uppercut: { damage: 20 }, slam: { damage: 26 } }
   },
 
@@ -94,7 +94,7 @@ Game.Config.characters = {
       jumpPunch: 'jumpPunch', jumpKick: 'jumpKick',
       throw: 'throw'
     },
-    specials: ['flashkick', 'fireball', 'superfireball'],
+    specials: ['superfireball', 'spinKick', 'flashkick', 'fireball'],
     overrides: { standKick: { damage: 10 }, crouchKick: { damage: 8 }, flashkick: { damage: 14 } }
   },
 
@@ -110,7 +110,7 @@ Game.Config.characters = {
       jumpPunch: 'jumpPunch', jumpKick: 'jumpKick',
       throw: 'throw'
     },
-    specials: ['superfireball', 'uppercut', 'fireball'],
+    specials: ['superfireball', 'straight', 'uppercut', 'fireball'],
     overrides: { standPunch: { damage: 9 }, crouchPunch: { damage: 8 }, uppercut: { damage: 18 } }
   },
 
@@ -126,7 +126,7 @@ Game.Config.characters = {
       jumpPunch: 'jumpPunch', jumpKick: 'jumpKick',
       throw: 'throw'
     },
-    specials: ['superfireball', 'flashkick', 'slam', 'fireball'],
+    specials: ['superfireball', 'chakram', 'flashkick', 'slam', 'fireball'],
     overrides: { slam: { damage: 18 }, flashkick: { damage: 12 } }
   },
 

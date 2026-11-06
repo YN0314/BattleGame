@@ -22,7 +22,8 @@
     items: function () {
       return [
         { label: '1 PLAYER', enabled: !!Game.Logic.AI, mode: 'cpu' },
-        { label: 'VS BATTLE', enabled: true, mode: '2p' }
+        { label: 'VS BATTLE', enabled: true, mode: '2p' },
+        { label: 'TRAINING', enabled: true, mode: 'train' }       // 技の確認(相手は動かない・体力とゲージは減らない)
       ];
     },
 
@@ -91,7 +92,7 @@
       if (nav.confirm && items[this.index].enabled) {
         Game.Core.Sound.play('ok');
         if (items[this.index].mode === 'cpu') { this.stage = 'level'; return; }
-        SM.go('select', { mode: '2p' }); return;
+        SM.go('select', { mode: items[this.index].mode }); return;
       }
     },
 

@@ -30,6 +30,7 @@
 //                    'high' = 上段(立ちガードのみ可) / 'low' = 下段(しゃがみガードのみ可) / 'mid' = 中段(どちらでも可)
 Game.Config.moves = {
   standPunch: {
+    label: 'PUNCH',
     cancel: 'special',
     startup: 4, active: 3, recovery: 8,
     damage: 5, hitstun: 14, knockback: 2.2, hitstop: 5,
@@ -37,6 +38,7 @@ Game.Config.moves = {
     hitbox: { x: 6, y: -40, w: 20, h: 8 }, level: 'mid'
   },
   standKick: {
+    label: 'KICK',
     cancel: 'special',
     startup: 7, active: 4, recovery: 12,
     damage: 8, hitstun: 18, knockback: 3.0, hitstop: 7,
@@ -75,6 +77,7 @@ Game.Config.moves = {
   //   projectile: speed=速さ(px/フレーム) offsetX/offsetY=出る位置 w/h=当たりの大きさ
   //               以降は通常技と同じ(damage, hitstun, knockback, hitstop, blockstun, blockKnockback, level)
   fireball: {
+    label: 'FIREBALL',
     cancel: 'super',
     special: true, command: 'fireball',
     startup: 12, active: 0, recovery: 22,
@@ -88,6 +91,7 @@ Game.Config.moves = {
   //   invuln=技の出始めの無敵フレーム数  launch=飛び上がりの速さ(vy:上向きが負, vx:前へ)
   //   active=上昇中に攻撃判定が出ているフレーム数  landRecovery=着地後に動けないフレーム数
   uppercut: {
+    label: 'UPPERCUT',
     cancel: 'super',
     special: true, command: 'uppercut',
     startup: 3, active: 10, recovery: 0,
@@ -100,6 +104,7 @@ Game.Config.moves = {
   // ---- ため技 ----
   // ソニックブーム風:←ため→+パンチ。速くて小さい飛び道具。出したあとの隙は大きめ。
   sonic: {
+    label: 'SONIC',
     cancel: 'super',
     special: true, command: 'sonic', pose: 'fireball',
     startup: 10, active: 0, recovery: 26,
@@ -111,10 +116,11 @@ Game.Config.moves = {
   },
   // サマーソルト風:↓ため↑+キック。後ろへ跳びながら蹴り上げる。ダウンを奪う。
   flashkick: {
+    label: 'FLASH KICK',
     cancel: 'super',
     special: true, command: 'flashkick', button: 'kick',
     startup: 4, active: 12, recovery: 0,
-    launch: { vy: -8, vx: -1.0 }, landRecovery: 18,
+    launch: { vy: -8, vx: 1.2 }, landRecovery: 18,
     damage: 12, hitstun: 20, knockback: 2.4, hitstop: 7,
     blockstun: 16, blockKnockback: 2.2, knockdown: true,
     hitbox: { x: -2, y: -62, w: 26, h: 48 }, level: 'mid'
@@ -123,6 +129,7 @@ Game.Config.moves = {
   // ---- 投げ技(パンチ+キック同時押し)----
   // ガード中の相手にも成立する。相手が地上にいて、range 以内のときだけ。
   throw: {
+    label: 'THROW',
     throw: true, pose: 'throw',
     range: 32, grabDist: 26, hitFrame: 12, frames: 36, techFrames: 11,
     damage: 12, hitstun: 20, knockback: 2.6, hitstop: 8, knockdown: true,
@@ -132,6 +139,7 @@ Game.Config.moves = {
   // 叩きつけ(コマンド投げ):←↙↓↘→+パンチ。通常の投げより遠くまで届き、ダメージが大きい。
   // 相手を持ち上げて地面に叩きつける。外すと大きな隙。
   slam: {
+    label: 'SLAM',
     throw: true, command: 'slam', pose: 'slam',
     needClose: 72, range: 52, grabDist: 26,
     liftStart: 6, lift: 26, hitFrame: 18, frames: 52, whiffFrames: 32, poseAt: [0, 6, 18, 30],
@@ -143,6 +151,7 @@ Game.Config.moves = {
   // スターブラスト:↓↘→↓↘→+パンチ(キーボード向けに ↓→↓→ でも可)。
   // 出始めに無敵。大きな飛び道具で、普通の飛び道具を打ち消して進む。ガードされても削る。
   superfireball: {
+    label: 'STAR BLAST',
     special: true, command: 'superfireball', pose: 'fireball',
     cost: 100, noMeter: true, title: 'STAR BLAST', chip: 0.2,
     startup: 14, active: 0, recovery: 34, invuln: 14,
@@ -156,6 +165,7 @@ Game.Config.moves = {
   // ---- NAKAGAWA 専用技(characters.config.js の nakagawa が使う)----
   // 書類ばらまき:←ため→+パンチ。紙の束を低く速く飛ばす。軽いが隙が小さい。(projectile.look = 'paper' で紙の見た目)
   paperToss: {
+    label: 'PAPER TOSS',
     cancel: 'super',
     special: true, command: 'sonic', pose: 'paperToss',
     startup: 9, active: 0, recovery: 20,
@@ -167,6 +177,7 @@ Game.Config.moves = {
   },
   // カバン投げ:↓↘→+パンチ。ゆっくり大きく飛ぶ重い一撃。
   briefcase: {
+    label: 'BRIEFCASE',
     cancel: 'super',
     special: true, command: 'fireball', pose: 'briefcase',
     startup: 16, active: 0, recovery: 26,
@@ -178,6 +189,7 @@ Game.Config.moves = {
   },
   // 残業突入(超必殺技):書類の嵐。大きな飛び道具で、普通の飛び道具を打ち消して進む。
   overtime: {
+    label: 'OVERTIME',
     special: true, command: 'superfireball', pose: 'overtime',
     cost: 100, noMeter: true, title: 'OVERTIME', chip: 0.2,
     startup: 14, active: 0, recovery: 34, invuln: 14,
@@ -185,6 +197,56 @@ Game.Config.moves = {
       look: 'paper', speed: 3.8, offsetX: 24, offsetY: -34, w: 48, h: 34, big: true,
       damage: 36, hitstun: 30, knockback: 4.0, hitstop: 12, knockdown: true,
       blockstun: 22, blockKnockback: 3.4, level: 'mid', chip: 0.2, noMeter: true
+    }
+  },
+
+  // ---- 仮キャラ用の専用技 ----
+  // advance = 技が出ている間(active)、前へ進む速さ
+  flyKick: {                         // MEI:飛燕脚(前へ踏み込む飛び蹴り)
+    label: 'FLY KICK',
+    cancel: 'super',
+    special: true, command: 'uppercut', button: 'kick', pose: 'flyKick',
+    startup: 8, active: 10, recovery: 16, advance: 2.8,
+    damage: 12, hitstun: 20, knockback: 2.8, hitstop: 7,
+    blockstun: 15, blockKnockback: 2.4, knockdown: true,
+    hitbox: { x: 4, y: -38, w: 30, h: 13 }, level: 'mid'
+  },
+  tackle: {                          // BORIS:ショルダータックル(重いが大きく進む)
+    label: 'TACKLE',
+    cancel: 'super',
+    special: true, command: 'sonic', pose: 'tackle',
+    startup: 12, active: 12, recovery: 24, advance: 3.4,
+    damage: 17, hitstun: 24, knockback: 3.6, hitstop: 9,
+    blockstun: 17, blockKnockback: 3.0, knockdown: true,
+    hitbox: { x: 2, y: -40, w: 26, h: 36 }, level: 'mid'
+  },
+  spinKick: {                        // ISA:回転蹴り(カポエイラ風)
+    label: 'SPIN KICK',
+    cancel: 'super',
+    special: true, command: 'uppercut', button: 'kick', pose: 'spinKick',
+    startup: 9, active: 12, recovery: 18, advance: 2.2,
+    damage: 13, hitstun: 20, knockback: 2.8, hitstop: 7,
+    blockstun: 15, blockKnockback: 2.4, knockdown: true,
+    hitbox: { x: 2, y: -50, w: 30, h: 26 }, level: 'high'
+  },
+  straight: {                        // JAX:ダッシュストレート(踏み込んで打つ強いパンチ)
+    label: 'STRAIGHT',
+    cancel: 'super',
+    special: true, command: 'sonic', pose: 'straight',
+    startup: 10, active: 6, recovery: 20, advance: 3.2,
+    damage: 15, hitstun: 22, knockback: 3.4, hitstop: 8,
+    blockstun: 15, blockKnockback: 2.8, knockdown: true,
+    hitbox: { x: 8, y: -43, w: 28, h: 11 }, level: 'mid'
+  },
+  chakram: {                         // PRIYA:円盤(掌底で飛ばす回転する輪)
+    label: 'CHAKRAM',
+    cancel: 'super',
+    special: true, command: 'sonic', pose: 'palmStrike',
+    startup: 10, active: 0, recovery: 22,
+    projectile: {
+      look: 'ring', speed: 4.6, offsetX: 22, offsetY: -34, w: 15, h: 15,
+      damage: 10, hitstun: 17, knockback: 2.6, hitstop: 6,
+      blockstun: 13, blockKnockback: 2.2, level: 'mid'
     }
   }
 };

@@ -675,6 +675,11 @@
     uppercut:    [{ f: 'focus' }, { f: 'shout', fx: ['rise'] }, { f: 'strain', fx: ['rise'] }],
     uppercutLand:[{ f: 'strain' }],
     flashkick:   [{ f: 'focus' }, { f: 'shout', fx: ['crescent'] }, { f: 'strain' }],
+    flyKick:     [{ f: 'focus' }, { f: 'shout', fx: ['kick'] }, { f: 'strain' }],
+    tackle:      [{ f: 'strain' }, { f: 'shout', fx: ['dust'] }, { f: 'strain' }],
+    spinKick:    [{ f: 'focus' }, { f: 'shout', fx: ['crescent', 'kick'] }, { f: 'focus' }],
+    straight:    [{ f: 'focus' }, { f: 'shout', fx: ['punch'] }, { f: 'focus' }],
+    palmStrike:  [{ f: 'focus', oF: true, oB: true }, { f: 'shout', oF: true, oB: true, fx: ['ki'] }, { f: 'focus', oF: true, oB: true }],
     throw:       [{ f: 'strain', oF: true, oB: true, fx: ['grab'] }, { f: 'shout', oF: true, oB: true }, { f: 'focus' }],
     slam:        [{ f: 'strain', oF: true, oB: true, fx: ['grab'] }, { f: 'shout', oF: true, oB: true }, { f: 'shout', oF: true, oB: true, fx: ['slamfx'] }, { f: 'focus' }],
     guard:       [{ f: 'guard' }],
@@ -776,6 +781,43 @@
       const charge = mk(Object.assign({}, base, { chest: [-1, -33], head: [1, -43], handF: [4, -27], handB: [1, -28] }));
       const shoot = mk(Object.assign({}, base, { chest: [4, -32], head: [6, -42], handF: [21, -33], handB: [18, -32] }));
       return [charge, shoot, shoot];
+    })(),
+
+
+    // MEI 飛燕脚:構えて沈む → 後ろへ反って前へ水平に蹴り出す → 戻す
+    flyKick: (function () {
+      const wind = mk({ hip: [-3, -21], chest: [-5, -32], head: [-4, -42], handF: [4, -36], handB: [0, -34], ankleF: [6, -16], ankleB: [-9, GY] });
+      const kick = mk({ hip: [-2, -25], chest: [-8, -33], head: [-9, -43], handF: [0, -41], handB: [-5, -37], ankleF: [27, -33], ankleB: [-11, -7] });
+      return [wind, kick, wind];
+    })(),
+    // BORIS タックル:腰を落として溜める → 肩を前に低く突っ込む → 起き上がる
+    tackle: (function () {
+      const wind = mk({ hip: [-4, -19], chest: [-5, -29], head: [-3, -39], handF: [3, -30], handB: [0, -28], ankleF: [8, GY], ankleB: [-13, GY] });
+      const ram = mk({ hip: [3, -20], chest: [13, -27], head: [18, -34], handF: [24, -29], handB: [18, -25], ankleF: [17, GY], ankleB: [-9, -3] });
+      const rec = mk({ hip: [1, -21], chest: [6, -30], head: [9, -39], handF: [16, -31], handB: [10, -29], ankleF: [12, GY], ankleB: [-8, GY] });
+      return [wind, ram, rec];
+    })(),
+    // ISA 回転蹴り:後ろへ反って構える → 体をそらして高く蹴り上げる → 戻す
+    spinKick: (function () {
+      const wind = mk({ hip: [-3, -20], chest: [-8, -29], head: [-11, -38], handF: [-4, -24], handB: [-10, -27], ankleF: [8, -8], ankleB: [-9, GY] });
+      const kick = mk({ hip: [-2, -23], chest: [-9, -31], head: [-13, -39], handF: [-10, -25], handB: [-15, -30], ankleF: [25, -41], ankleB: [-8, GY] });
+      const rec = mk({ hip: [-2, -22], chest: [-5, -32], head: [-5, -42], handF: [4, -34], handB: [0, -31], ankleF: [8, -12], ankleB: [-9, GY] });
+      return [wind, kick, rec];
+    })(),
+    // JAX ストレート:体を沈めて引く → 大きく踏み込んで打ち抜く → 戻す
+    straight: (function () {
+      const wind = mk({ hip: [-3, -21], chest: [-4, -31], head: [-2, -41], handF: [-4, -33], handB: [9, -37], ankleF: [8, GY], ankleB: [-12, GY] });
+      const hit = mk({ hip: [3, -21], chest: [11, -31], head: [15, -40], handF: [31, -37], handB: [9, -35], ankleF: [21, GY], ankleB: [-7, GY] });
+      const rec = mk({ hip: [1, -22], chest: [6, -32], head: [8, -42], handF: [19, -36], handB: [8, -35], ankleF: [15, GY], ankleB: [-8, GY] });
+      return [wind, hit, rec];
+    })(),
+    // PRIYA 掌底:両手を腰へ引く → 両手の手のひらを前へ突き出す → 戻す
+    palmStrike: (function () {
+      const base = { hip: [-1, -22], ankleF: [11, GY], ankleB: [-10, GY] };
+      const wind = mk(Object.assign({}, base, { chest: [-2, -33], head: [0, -43], handF: [0, -28], handB: [-3, -30] }));
+      const push = mk(Object.assign({}, base, { chest: [4, -33], head: [6, -43], handF: [22, -36], handB: [19, -33] }));
+      const rec = mk(Object.assign({}, base, { chest: [2, -33], head: [4, -43], handF: [15, -34], handB: [11, -32] }));
+      return [wind, push, rec];
     })(),
 
     // 書類ばらまき:書類を持った腕を体の前へ引く → 横に振り抜く → 戻す

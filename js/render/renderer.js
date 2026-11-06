@@ -119,6 +119,14 @@
       rect(cx - 1, cy - 1 + bob, 2, 2.5, '#e8c24a');
       return;
     }
+    if (p.def.look === 'ring') {                                  // 回転する金の輪
+      const sq = 1.2 + Math.abs(Math.cos(p.age * 0.35)) * 6.8;
+      disc(cx - p.dir * 5, cy, 4.2, 4.2 * 0.7, '#b8601a');
+      disc(cx, cy, sq, 7.4, '#1a1a1a');
+      disc(cx, cy, Math.max(0.8, sq - 0.9), 6.5, '#f0c24a');
+      if (sq > 4) { disc(cx, cy, sq - 2.4, 4.6, '#1a1a1a'); disc(cx, cy, Math.max(0.5, sq - 3.2), 3.8, '#b8601a'); }
+      return;
+    }
     // paper: 紙が何枚か、向きをくるくる変えながら飛ぶ
     const n = p.def.big ? 7 : 3;
     for (let i = 0; i < n; i++) {

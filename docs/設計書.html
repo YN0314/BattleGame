@@ -925,6 +925,17 @@ pre code { padding:0; background:none; }
 <li>後ろを素早く2回押すとバックステップ(<code>backstepFrames</code> 18、初速 <code>backstepSpeed</code> 3.6、少し浮く <code>backstepHop</code> 7)。動き出したら止まれず、ガードも投げられもしない状態になるが、攻撃は受ける。</li>
 <li>実装は <code>fighter.js</code>:<code>detectDoubleTap</code>(押した瞬間の間隔を見る)と、状態 <code>dash</code> / <code>backstep</code>。値は <code>physics.config.js</code>(キャラごとに <code>body</code> で上書き可)。絵は歩きのポーズを速く回す/ジャンプのポーズ(専用ポーズは未作成)。</li>
 </ul>
+<h3 id="11b22-5">11b.22 サマーソルトの前進、専用技5つ、トレーニング(技の確認)モード</h3>
+<ul>
+<li>サマーソルト(<code>moves.config.js</code> の flashkick)の移動を後方→前方に直した(<code>launch.vx</code> を -1.0 → +1.2)。</li>
+<li>仮キャラ5人に専用技と専用ポーズを追加(技ライブラリに追加。<code>advance</code> = 技が出ている間、前へ進む速さ。<code>fighter.js</code> の <code>updateSpecial</code>):MEI「FLY KICK」(→↓↘+キック、水平の飛び蹴り)、BORIS「TACKLE」(←ため→+パンチ、肩から突進)、ISA「SPIN KICK」(→↓↘+キック、反って高く蹴る回転蹴り)、JAX「STRAIGHT」(←ため→+パンチ、踏み込む強打)、PRIYA「CHAKRAM」(←ため→+パンチ、回転する輪を飛ばす掌底。飛び道具の見た目 <code>look: 'ring'</code>)。</li>
+<li>トレーニング:タイトルの TRAINING → キャラ選択(2人目は動かない相手)→ 確認画面。体力・ゲージは減らず、時間・勝敗なし。左上に技リスト(技名とコマンド。コマンドはテンキー表記:6=前 4=後ろ 2=下 8=上 3=前下)。数字キー 1〜9,0 でその技を自動で実演(相手を適切な位置に置き直す)。自分でコマンドを入力しても出せる。Enter で選択画面へ戻る。</li>
+<li>文字に <code>+</code> <code>&gt;</code> <code>(</code> <code>)</code> を追加。</li>
+</ul>
+<h3 id="11b23">11b.23 ポーズ画面での技の確認</h3>
+<ul>
+<li>対戦中(導入〜戦闘)に Enter(スタート)でポーズ。時間もキャラも止まる。技の一覧(技名・テンキー表記のコマンド)、選んだ技の動きの繰り返し再生(技の発生・持続・硬直の時間どおり)、威力・発生・持続・硬直・ゲージ消費の数値を表示。↑↓で技、←→で1P/2Pの切り替え、もう一度 Enter で再開。実装は <code>battle.js</code> の <code>updatePause</code> と <code>ui.js</code> の <code>drawPause</code>。トレーニングモードはそのまま残してある。</li>
+</ul>
 </main>
 <script>
 document.querySelectorAll('table').forEach(t => {

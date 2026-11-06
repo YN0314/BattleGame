@@ -172,6 +172,87 @@
     });
   }
 
+  // コマンドの表記:テンキー配置(6=前 4=後ろ 2=下 8=上 3=前下)
+  function commandText(m) {
+    const C = Game.Config.input.commands, btn = (m.button === 'kick') ? 'K' : 'P';
+    if (m.throw && !m.command) return 'P + K';
+    const c = C[m.command];
+    if (!c) return '';
+    if (c.type === 'charge') return 'HOLD ' + c.hold[0] + ' > ' + c.release[0] + ' + ' + btn;
+    const seq = c.motions[0].map(function (st) { return st[0]; }).join('');
+    return seq + ' + ' + btn;
+  }
+
+  // 技の確認(トレーニング)の技リスト
+  function drawTrain(ctx, scene) {
+    const Font = Game.Render.Font, D = Game.Config.display;
+    const list = scene.moveList();
+    const x = 4, y = 30, w = 138, rowH = 8, h = 20 + list.length * rowH + 16;
+    ctx.fillStyle = 'rgba(5,5,12,0.72)';
+    ctx.fillRect(x, y, w, h);
+    Font.draw(ctx, 'TRAINING', x + 4, y + 4, 1, '#ffe56a', 'left', null);
+    Font.draw(ctx, scene.fighters[0].char.name || '', x + w - 4, y + 4, 1, '#9fb0e8', 'right', null);
+    list.forEach(function (it, i) {
+      const yy = y + 16 + i * rowH, on = scene.demoName === it.name;
+      if (on) { ctx.fillStyle = 'rgba(255,229,106,0.18)'; ctx.fillRect(x + 1, yy - 1, w - 2, rowH); }
+      Font.draw(ctx, String((i + 1) % 10), x + 4, yy, 1, '#ffe56a', 'left', null);
+      Font.draw(ctx, it.move.label || it.name.toUpperCase(), x + 12, yy, 1, on ? '#ffffff' : '#c8d0f0', 'left', null);
+      Font.draw(ctx, commandText(it.move), x + w - 4, yy, 1, on ? '#ffffff' : '#8fa0d8', 'right', null);
+    });
+    const by = y + 16 + list.length * rowH + 2;
+    Font.draw(ctx, 'NUMBER KEY: DEMO   ENTER: BACK', x + 4, by, 1, '#7a86b8', 'left', null);
+    Font.draw(ctx, '6 FWD  4 BACK  2 DOWN  8 UP', x + 4, by + 7, 1, '#7a86b8', 'left', null);
+  }
+
+  // ポーズ画面:技の一覧(コマンド付き)と、選んだ技の動きの再生
+  function drawPause(ctx, scene) {
+    const Font = Game.Render.Font, D = Game.Config.display, S = Game.Data.Sprites, RES = res();
+    const side = scene.pauseSide, fi = scene.fighters[side], list = scene.moveList(side);
+    const sel = list[Math.min(scene.pauseIdx, list.length - 1)], m = sel.move;
+    ctx.fillStyle = 'rgba(5,5,14,0.82)'; ctx.fillRect(0, 0, D.width, D.height);
+    Font.draw(ctx, 'PAUSE', D.width / 2, 8, 3, '#ffe56a', 'center', '#7a1c10');
+    Font.draw(ctx, 'P' + (side + 1) + ' ' + (fi.char.name || ''), D.width / 2, 34, 2, side ? '#4a8aff' : '#ff4a3a', 'center', '#05050a');
+    // 一覧
+    const x = 8, y = 56, w = 176, rowH = 11;
+    ctx.fillStyle = 'rgba(30,34,70,0.7)'; ctx.fillRect(x, y - 4, w, list.length * rowH + 8);
+    list.forEach(function (it, i) {
+      const yy = y + i * rowH, on = it === sel;
+      if (on) { ctx.fillStyle = 'rgba(255,229,106,0.25)'; ctx.fillRect(x + 1, yy - 2, w - 2, rowH); }
+      Font.draw(ctx, it.move.label || it.name.toUpperCase(), x + 5, yy, 1, on ? '#ffffff' : '#a8b0d8', 'left', null);
+      Font.draw(ctx, commandText(it.move), x + w - 5, yy, 1, on ? '#ffe56a' : '#7f8ac0', 'right', null);
+    });
+    // 動きの再生(技の時間どおりに、終わったら少し止めて繰り返す)
+    const ax = 290, ay = 150;
+    ctx.fillStyle = 'rgba(30,34,70,0.7)'; ctx.fillRect(196, 52, 180, 130);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(200, ay + 1, 172, 1);
+    let name = m.pose || sel.name, frame = 0;
+    if (m.throw || m.hitFrame !== undefined) {
+      const at = m.poseAt || [0, m.hitFrame, m.hitFrame + 10], total = at[2] + 18, t = scene.pauseT % (total + 20);
+      at.forEach(function (st, i) { if (t >= st) frame = i; });
+    } else {
+      const total = m.startup + (m.active || 0) + (m.recovery || 0), t = Math.min(scene.pauseT % (total + 24), total);
+      const xx = t < m.startup ? t / Math.max(1, m.startup) : 1;
+      frame = xx * xx;
+      if (t >= m.startup + (m.active || 0)) {
+        const r = (t - m.startup - (m.active || 0)) / Math.max(1, m.recovery || 1), e = Math.min(1, r * 1.5);
+        frame = 1 + e * e * (3 - 2 * e);
+      }
+    }
+    const img = S.get(name, frame, fi.palette, fi.char.sprite), k = 1.5;
+    const ox = img.originX !== undefined ? img.originX : S.originX, oy = img.originY !== undefined ? img.originY : S.originY;
+    ctx.drawImage(img, ax - ox / RES * k, ay - oy / RES * k, img.width / RES * k, img.height / RES * k);
+    // 数値
+    const st = [];
+    if (m.damage !== undefined) st.push('DMG ' + m.damage);
+    else if (m.projectile) st.push('DMG ' + m.projectile.damage);
+    if (m.startup !== undefined) st.push('START ' + m.startup);
+    if (m.active) st.push('ACTIVE ' + m.active);
+    if (m.recovery) st.push('RECOVER ' + m.recovery);
+    if (m.cost) st.push('GAUGE ' + m.cost);
+    Font.draw(ctx, st.join('  '), 286, 164, 1, '#c8d0f0', 'center', null);
+    Font.draw(ctx, 'UP DOWN: MOVE   LEFT RIGHT: PLAYER   ENTER: RESUME', D.width / 2, 192, 1, '#9fb0e8', 'center', '#05050a');
+  }
+
   function draw(ctx, scene) {
     const D = Game.Config.display;
     const g = D.gauge;
@@ -181,12 +262,12 @@
     const f = scene.fighters;
     const cx = D.width / 2;
 
+    if (scene.train) { drawTrain(ctx, scene); }
     bar(ctx, g.margin, g.top, g.width, g.height, f[0].health / max, trail[0], false);
     bar(ctx, D.width - g.margin - g.width, g.top, g.width, g.height, f[1].health / max, trail[1], true);
     Font.draw(ctx, 'P1', g.margin, g.top + g.height + 5, 1, '#e6e6f2', 'left', '#05050a');
     Font.draw(ctx, 'P2', D.width - g.margin, g.top + g.height + 5, 1, '#e6e6f2', 'right', '#05050a');
-    timer(ctx, scene);
-    pips(ctx, scene);
+    if (!scene.train) { timer(ctx, scene); pips(ctx, scene); }
     meterBar(ctx, f[0], false);
     meterBar(ctx, f[1], true);
 
@@ -222,6 +303,7 @@
         menu(ctx, scene.menuItems, null, scene.menuIndex, 122, 2);
       }
     }
+    if (scene.paused) drawPause(ctx, scene);
   }
 
   // ロゴ:押し出し(影を重ねる)+ 光の帯が横切る

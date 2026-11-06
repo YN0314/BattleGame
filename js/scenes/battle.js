@@ -40,6 +40,10 @@
       this.matchWinner = -1;
       this.fighters = [];                       // 前の試合のゲージを引き継がないように空にする
       this.ai = this.params.mode === 'cpu' ? Game.Logic.AI.create(this.params.level) : null;
+      this.paused = false;
+      this.train = this.params.mode === 'train';      // 技の確認(相手は動かず、体力もゲージも減らない)
+      this.demoQueue = [];
+      this.demoName = null;
       this.startRound();
     },
 
@@ -65,7 +69,27 @@
       this.winner = -1;
       this.reason = 'ko';
       this.timer = Game.Config.game.round.timeLimitSec * Game.Config.game.fps;
-      this.setPhase('intro');
+      this.setPhase(this.train ? 'fight' : 'intro');
+    },
+
+    // 技の確認用:このキャラの技の一覧(必殺技 → 投げ)。数字キー 1〜9,0 で実演する
+    moveList: function (side) {
+      const ch = this.fighters[side || 0].char;
+      const names = ch.specials.concat(['throw']).slice(0, 10);
+      return names.map(function (n) { return { name: n, move: ch.moves[n] }; });
+    },
+
+    // 実演:相手を所定の位置に置き直し、決まった技を自動で出す(CPUと同じく技名を直接伝える)
+    startDemo: function (name) {
+      const f = this.fighters, W = Game.Config.display.width;
+      const m = f[0].char.moves[name];
+      f[0].x = W * 0.32; f[0].facing = 1;
+      f[1].x = W * 0.32 + (m.throw ? 38 : 150); f[1].facing = -1;
+      Game.Logic.Projectile.reset();
+      [f[0], f[1]].forEach(function (fi) { fi.vx = 0; fi.vy = 0; fi.y = Game.Config.display.floorY; fi.onGround = true; fi.move = null; fi.setState('idle'); });
+      f[0].meter = Game.Config.game.meter.max;
+      this.demoName = name;
+      this.demoPending = name;
     },
 
     setPhase: function (name) {
@@ -80,6 +104,20 @@
 
     // プレイヤーごとの入力。CPU対戦では2Pの入力をCPUが作る
     inputFor: function (i) {
+      if (this.train) {
+        if (i === 1) return NEUTRAL;                                   // ダミーは動かない
+        if (this.demoPending) {
+          const name = this.demoPending, st = this.fighters[0].state;
+          if (st === 'idle' || st === 'walk' || st === 'crouch') {
+            this.demoPending = null;
+            const held = blank();
+            if (name === 'throw') held.kick = true;                    // 通常の投げ:パンチ+キック同時押し
+            const pressed = blank(); pressed.punch = true;
+            return { held: held, pressed: pressed, special: name === 'throw' ? undefined : name };
+          }
+        }
+        return Game.Core.Input.get(0);
+      }
       if (i === 1 && this.ai) return this.ai.think(this.fighters[1], this.fighters[0]);
       return Game.Core.Input.get(i);
     },
@@ -238,6 +276,18 @@
       }
 
       In.update();
+      if (!this.train && (this.phase === 'fight' || this.phase === 'intro')) {
+        // ポーズ:Enter(スタート)で止めて、技の一覧とコマンド・動きを見られる。もう一度押すと再開
+        const pr0 = In.get(0).pressed, pr1 = In.get(1).pressed;
+        if (pr0.start || pr1.start) {
+          this.paused = !this.paused;
+          this.pauseSide = 0; this.pauseIdx = 0; this.pauseT = 0;
+          Game.Core.Sound.play(this.paused ? 'ok' : 'back');
+          if (!this.paused) Game.Core.InputHistory.reset();
+          return;
+        }
+        if (this.paused) { this.updatePause(); return; }
+      }
       this.phaseFrame++;
       f.forEach(function (fi) { if (fi.meterFlash > 0) fi.meterFlash--; });
 
@@ -250,8 +300,17 @@
           this.setPhase('fight');
         }
       } else if (this.phase === 'fight') {
+        if (this.train) {
+          const M = Game.Config.game.meter, mx = Game.Config.game.fighter.maxHealth;
+          f.forEach(function (fi) { fi.health = mx; fi.stun = 0; fi.dizzyPending = false; if (fi.state !== 'special') fi.meter = M.max; });   // 減らない
+          const keys = this.demoQueue.splice(0);
+          if (keys.length) this.startDemo(keys[keys.length - 1]);
+          if (Game.Core.Input.get(0).pressed.start) { Game.Core.Sound.play('back'); Game.Core.SceneManager.go('select', { mode: 'train' }); return; }
+        }
         this.stepWorld([this.inputFor(0), this.inputFor(1)], true);
-        if (f[0].health <= 0 || f[1].health <= 0) {
+        if (this.train) {
+          // 確認モード:決着も時間切れもない
+        } else if (f[0].health <= 0 || f[1].health <= 0) {
           this.endRound('ko');
         } else if (--this.timer <= 0) {
           this.timer = 0;
@@ -268,6 +327,19 @@
       }
 
       Game.Render.UI.update(f);
+    },
+
+    // ポーズ中の操作:←→でプレイヤー切り替え、↑↓で技を選ぶ
+    updatePause: function () {
+      const In = Game.Core.Input;
+      this.pauseT++;
+      [0, 1].forEach(function (i) {
+        const p = In.get(i).pressed;
+        const n = Battle.moveList(Battle.pauseSide).length;
+        if (p.left || p.right) { Battle.pauseSide = 1 - Battle.pauseSide; Battle.pauseIdx = 0; Battle.pauseT = 0; Game.Core.Sound.play('move'); }
+        if (p.up) { Battle.pauseIdx = (Battle.pauseIdx + n - 1) % n; Battle.pauseT = 0; Game.Core.Sound.play('move'); }
+        if (p.down) { Battle.pauseIdx = (Battle.pauseIdx + 1) % n; Battle.pauseT = 0; Game.Core.Sound.play('move'); }
+      });
     },
 
     updateMenu: function () {
@@ -288,6 +360,16 @@
       Game.Core.Debug.show(this);
     }
   };
+
+  // 技の確認:数字キー(1〜9,0)で、そのキャラの技を実演する
+  window.addEventListener('keydown', function (e) {
+    if (e.repeat || !Battle.train || Game.Core.SceneManager.current() !== Battle) return;
+    const m = /^(?:Digit|Numpad)([0-9])$/.exec(e.code);
+    if (!m) return;
+    const idx = (Number(m[1]) + 9) % 10;                            // 1→0番目 … 0→9番目
+    const list = Battle.moveList();
+    if (list[idx]) Battle.demoQueue.push(list[idx].name);
+  });
 
   Game.Scenes.Battle = Battle;
   Game.Core.SceneManager.register('battle', Battle);

@@ -462,6 +462,7 @@
         return;
       }
       this.vx = 0;
+      if (m.advance && this.attackFrame > m.startup && this.attackFrame <= m.startup + m.active) this.moveX(this.facing * m.advance);   // 技の間、前へ進む
       if (this.attackFrame >= m.startup + m.active + m.recovery) {
         this.move = null;
         this.setState('idle');

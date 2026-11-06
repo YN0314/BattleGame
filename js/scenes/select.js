@@ -118,7 +118,7 @@
 
       // 見出し
       Font.draw(ctx, 'PLAYER SELECT', cx, 7, 2, '#ffe56a', 'center', '#7a1c10');
-      Font.draw(ctx, this.twoPlayers() ? 'VS BATTLE' : '1 PLAYER', cx, 22, 1, '#9fb0e8', 'center', '#05050a');
+      Font.draw(ctx, this.params.mode === 'train' ? 'TRAINING' : (this.twoPlayers() ? 'VS BATTLE' : '1 PLAYER'), cx, 22, 1, '#9fb0e8', 'center', '#05050a');
 
       // ステージの予告(いま見ているキャラのステージ)
       const sid = this.stageId;
@@ -150,7 +150,7 @@
         } else {
           Font.draw(ctx, '?', x + w / 2, y + 60, 8, '#3a4270', 'center', '#05050a');
         }
-        const tag = self.twoPlayers() ? 'P' + (p + 1) : (p === 0 ? 'P1' : 'CPU');
+        const tag = self.params.mode === 'train' ? (p === 0 ? 'P1' : 'DUMMY') : (self.twoPlayers() ? 'P' + (p + 1) : (p === 0 ? 'P1' : 'CPU'));
         Font.draw(ctx, tag, x + 4, y + 5, 1, col, 'left', '#05050a');
         if (self.locked[p] && Math.floor(t / 8) % 2 === 0) Font.draw(ctx, 'OK', x + w - 4 - 8, y + 5, 1, '#ffe56a', 'right', '#05050a');
       });
