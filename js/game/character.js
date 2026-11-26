@@ -28,12 +28,23 @@
       moves[slot] = merge(lib[name], (def.overrides || {})[name]);
     };
     Object.keys(def.normals).forEach(function (slot) { put(slot, def.normals[slot]); });
+    // 強攻撃は、キャラの定義に書かれていなければ、ライブラリの同名の技を使う
+    ['standHPunch', 'standHKick', 'crouchHPunch', 'crouchHKick', 'jumpHPunch', 'jumpHKick'].forEach(function (slot) {
+      if (!moves[slot]) put(slot, slot);
+    });
     def.specials.forEach(function (name) { put(name, name); });
+    // 大きさの倍率:キャラごとの scale × 全員の display.characterScale。絵も当たり判定も、この倍率で足元を中心に拡大・縮小する
+    const scale = (Game.Config.display.characterScale || 1) * (def.scale || 1);
+    const body = merge(Game.Config.physics, def.body);
+    if (scale !== 1) {                        // 押し合い・喰らい判定の体の寸法(幅・立ちの高さ・しゃがみの高さ)
+      body.bodyWidth *= scale; body.standHeight *= scale; body.crouchHeight *= scale;
+    }
     return {
       id: id,
       name: def.name,
       sprite: def.sprite,
-      body: merge(Game.Config.physics, def.body),
+      scale: scale,
+      body: body,
       moves: moves,
       specials: def.specials.slice()
     };

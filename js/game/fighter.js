@@ -267,8 +267,10 @@
       this.tapF.held = f; this.tapB.held = b;
     }
 
-    // 押した瞬間のボタン。'Punch' / 'Kick' / null
+    // 押した瞬間のボタン。'HPunch'(強パンチ) / 'HKick'(強キック) / 'Punch' / 'Kick' / null
     pressedAttack(input) {
+      if (input.pressed.hpunch) return 'HPunch';
+      if (input.pressed.hkick) return 'HKick';
       if (input.pressed.punch) return 'Punch';
       if (input.pressed.kick) return 'Kick';
       return null;
@@ -317,7 +319,7 @@
     // この技(投げ)で、相手をつかめるか
     canGrab(t, opp) {
       const ok = { idle: 1, walk: 1, dash: 1, crouch: 1, blockstun: 1, landing: 1 };
-      return this.onGround && opp.onGround && !!ok[opp.state] && Math.abs(opp.x - this.x) <= t.range;
+      return this.onGround && opp.onGround && !!ok[opp.state] && Math.abs(opp.x - this.x) <= t.range * (this.char.scale || 1);
     }
 
     // 通常の投げ:パンチとキックの同時押しで、近くにいる地上の相手を投げる。成立したら true
@@ -439,6 +441,8 @@
       const m = this.moveData;
       this.attackFrame++;
       this.vx = 0;
+      // 強攻撃は体ごと前へ流れる:advanceFrom フレームから出ている間、advance px/フレームで前進
+      if (m.advance && this.attackFrame > (m.advanceFrom !== undefined ? m.advanceFrom : m.startup) && this.attackFrame <= m.startup + m.active) this.moveX(this.facing * m.advance);
       if (this.attackFrame >= m.startup + m.active + m.recovery) {
         this.move = null;
         this.setState('idle');

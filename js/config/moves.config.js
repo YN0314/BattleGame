@@ -30,7 +30,7 @@
 //                    'high' = 上段(立ちガードのみ可) / 'low' = 下段(しゃがみガードのみ可) / 'mid' = 中段(どちらでも可)
 Game.Config.moves = {
   standPunch: {
-    label: 'PUNCH',
+    label: 'L PUNCH',
     cancel: 'special',
     startup: 4, active: 3, recovery: 8,
     damage: 5, hitstun: 14, knockback: 2.2, hitstop: 5,
@@ -38,7 +38,7 @@ Game.Config.moves = {
     hitbox: { x: 6, y: -40, w: 20, h: 8 }, level: 'mid'
   },
   standKick: {
-    label: 'KICK',
+    label: 'L KICK',
     cancel: 'special',
     startup: 7, active: 4, recovery: 12,
     damage: 8, hitstun: 18, knockback: 3.0, hitstop: 7,
@@ -70,6 +70,54 @@ Game.Config.moves = {
     damage: 8, hitstun: 18, knockback: 2.8, hitstop: 6,
     blockstun: 14, blockKnockback: 2.0,
     hitbox: { x: 2, y: -27, w: 24, h: 10 }, level: 'high'
+  },
+
+  // ---- 強攻撃(弱攻撃より、リーチが長く、振りが大きい=発生・硬直が遅い。そのぶん威力も高い) ----
+  standHPunch: {
+    label: 'H PUNCH',
+    cancel: 'special',
+    startup: 9, active: 4, recovery: 17,
+    advance: 1.8, advanceFrom: 6,                // 体ごと前へ流れる(出る少し前から)
+    damage: 9, hitstun: 19, knockback: 3.4, hitstop: 8,
+    blockstun: 13, blockKnockback: 2.4,
+    hitbox: [{ t: 0, x: 6, y: -41, w: 24, h: 9 }, { t: 1, x: 6, y: -41, w: 33, h: 9 }], level: 'mid'
+  },
+  standHKick: {
+    label: 'H KICK',
+    cancel: 'special',
+    startup: 12, active: 5, recovery: 21,
+    advance: 1.4, advanceFrom: 8,
+    damage: 13, hitstun: 22, knockback: 4.2, hitstop: 10,
+    blockstun: 16, blockKnockback: 3.0, knockdown: true,
+    hitbox: [{ t: 0, x: 4, y: -34, w: 22, h: 11 }, { t: 2, x: 4, y: -35, w: 36, h: 12 }], level: 'mid'
+  },
+  crouchHPunch: {
+    cancel: 'special',
+    startup: 8, active: 4, recovery: 16, crouch: true,
+    advance: 1.5, advanceFrom: 5,
+    damage: 8, hitstun: 18, knockback: 2.8, hitstop: 7,
+    blockstun: 12, blockKnockback: 2.0,
+    hitbox: { x: 6, y: -33, w: 26, h: 13 }, level: 'mid'
+  },
+  crouchHKick: {
+    cancel: 'special',
+    startup: 10, active: 5, recovery: 23, crouch: true,
+    advance: 2.0, advanceFrom: 7,
+    damage: 10, hitstun: 22, knockback: 3.4, hitstop: 8,
+    blockstun: 15, blockKnockback: 2.6, knockdown: true,
+    hitbox: { x: 2, y: -9, w: 31, h: 8 }, level: 'low'
+  },
+  jumpHPunch: {
+    startup: 7, active: 8, recovery: 0, air: true,
+    damage: 9, hitstun: 18, knockback: 2.8, hitstop: 7,
+    blockstun: 13, blockKnockback: 2.0,
+    hitbox: { x: 4, y: -38, w: 29, h: 10 }, level: 'high'
+  },
+  jumpHKick: {
+    startup: 8, active: 10, recovery: 0, air: true,
+    damage: 12, hitstun: 20, knockback: 3.2, hitstop: 8,
+    blockstun: 15, blockKnockback: 2.4,
+    hitbox: { x: 2, y: -27, w: 33, h: 12 }, level: 'high'
   },
 
   // ---- 必殺技(コマンドは input.config.js の commands) ----

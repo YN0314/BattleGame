@@ -9,7 +9,7 @@
   'use strict';
 
   function blank() {
-    return { up: false, down: false, left: false, right: false, punch: false, kick: false, start: false };
+    return { up: false, down: false, left: false, right: false, punch: false, kick: false, hpunch: false, hkick: false, start: false };
   }
   const NEUTRAL = { held: blank(), pressed: blank() };      // 何も押していない入力
 

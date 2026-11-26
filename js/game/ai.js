@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  const KEYS = ['up', 'down', 'left', 'right', 'punch', 'kick', 'start'];
+  const KEYS = ['up', 'down', 'left', 'right', 'punch', 'kick', 'hpunch', 'hkick', 'start'];
   function blank() { const o = {}; KEYS.forEach(function (k) { o[k] = false; }); return o; }
   function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 
@@ -60,7 +60,7 @@
         return Object.assign({ frames: frames, held: held, tap: null, special: null, age: 0 }, extra || {});
       };
       const hit = function (name, extra) {
-        const tap = name.indexOf('Punch') >= 0 ? 'punch' : 'kick';
+        const tap = name.indexOf('HPunch') >= 0 ? 'hpunch' : name.indexOf('HKick') >= 0 ? 'hkick' : name.indexOf('Punch') >= 0 ? 'punch' : 'kick';
         const keys = name.indexOf('crouch') === 0 ? ['down'] : [];
         return hold(keys, 24, Object.assign({ tap: tap }, extra || {}));
       };
@@ -77,7 +77,7 @@
         if (me.char.moves.throw && Math.random() < c.throw) return hold([], 4, { tap: 'punch', tap2: 'kick' });
         if (r < c.attackChance) {
           const k = Math.random();
-          return hit(k < 0.35 ? 'standPunch' : k < 0.6 ? 'standKick' : k < 0.8 ? 'crouchKick' : 'crouchPunch');
+          return hit(k < 0.25 ? 'standPunch' : k < 0.4 ? 'standKick' : k < 0.55 ? 'standHPunch' : k < 0.68 ? 'standHKick' : k < 0.82 ? 'crouchKick' : k < 0.9 ? 'crouchHKick' : 'crouchPunch');
         }
         return Math.random() < 0.5 ? hold([away], rnd(10, 22)) : hold([], rnd(6, 14));
       }
@@ -86,7 +86,7 @@
         if (shot && r < c.aggression * 0.5 + 0.2 && Game.Logic.Projectile.countFor(me) === 0 && Math.random() < c.fireball * 1.5) {
           return hold([], 4, { tap: me.char.moves[shot].button || 'punch', special: shot });
         }
-        if (r < c.aggression) return hit('standKick');
+        if (r < c.aggression) return hit(Math.random() < 0.45 ? 'standHKick' : 'standKick');   // 少し離れたら、リーチの長い強キック
         return hold([], rnd(6, 16));
       }
       // 遠い
@@ -142,6 +142,8 @@
           const p = this.plan;
           KEYS.forEach(function (k) { cur[k] = p.held[k]; });
           if (p.tap && p.age === 0) { cur[p.tap] = true; if (p.tap2) cur[p.tap2] = true; special = p.special; }
+          if (cur.hpunch) cur.punch = true;
+          if (cur.hkick) cur.kick = true;
           p.age++;
           if (p.age >= p.frames) this.plan = null;
         }

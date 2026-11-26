@@ -497,6 +497,7 @@ pre code { padding:0; background:none; }
     │   ├─ input.config.js     キー・パッド割り当て、しきい値、履歴フレーム数
     │   ├─ ai.config.js        CPUの強さ(5b)
     │   ├─ sound.config.js     効果音の音量(5c)
+    │   ├─ music.config.js     BGMの楽譜・音色・音量(11b.46)
     │   └─ display.config.js   解像度、拡大倍率、アニメ速度、デバッグ表示
     ├─ data/               素材データ(ロジックなし)
     │   ├─ palettes.js         1P/2Pの配色
@@ -507,6 +508,7 @@ pre code { padding:0; background:none; }
     │   ├─ debug.js            デバッグ表示
     │   ├─ sceneManager.js     シーン切り替え、メニュー操作(5a)
     │   ├─ inputHistory.js     入力履歴、コマンド判定(ステップ4)
+    │   ├─ music.js            BGMの演奏(11b.46)
     │   └─ sound.js            効果音(5c)
     ├─ game/               ゲームのルール(描画に触れない)
     │   ├─ character.js        キャラ定義+技ライブラリ → 実際の技データ
@@ -603,7 +605,7 @@ pre code { padding:0; background:none; }
 <h3 id="113-5c">11.3 ステップ5c の実装内容</h3>
 <ul>
 <li><strong>方式</strong>:音声ファイルは使わず、Web Audio API で合成(<code>core/sound.js</code>)。素材の用意やライセンスの心配がなく、数値で調整できる。</li>
-<li><strong>音の種類</strong>:通常技の素振り、ヒット(弱・強)、ガード、波動拳、昇竜拳、KO、メニュー(移動・決定・戻る)、ラウンド開始(ROUND / FIGHT)、時間切れ、試合終了。BGMはなし。</li>
+<li><strong>音の種類</strong>:通常技の素振り、ヒット(弱・強)、ガード、波動拳、昇竜拳、KO、メニュー(移動・決定・戻る)、ラウンド開始(ROUND / FIGHT)、時間切れ、試合終了。BGMは 11b.46 で追加(試作)。</li>
 <li><strong>鳴るタイミング</strong>:技の出始め(技が切り替わった瞬間を <code>battle.js</code> が見張る)、攻撃がヒット/ガードされた瞬間、ラウンドの進行、メニュー操作。</li>
 <li><strong>ブラウザの決まり</strong>:操作の前に音は出せないため、最初のキー入力・クリック・パッド操作で音を有効にする(タイトルの「ボタンを押してください」がその役目)。</li>
 <li><strong>設定</strong>(<code>config/sound.config.js</code>):<code>enabled</code>(無音)、<code>master</code>(全体音量)、<code>volumes</code>(音ごとの倍率)。ゲーム中は M キーで消音/解除。</li>
@@ -720,6 +722,7 @@ pre code { padding:0; background:none; }
 <li>ステージの雰囲気(仮:夜の街)</li>
 <li>技のフレームデータ・ダメージ値(上記は初期案、調整前提)</li>
 <li>ボタン設定画面の有無(仮:後回し)</li>
+<li>写真キャラ9人の絵の作り方。画像生成AIは 2026-11-19 に見送り、手描き調で寄せる方針(NAKAGAWA で検証し、2026-11-20 に残りの8人へ展開済み)。11b.28、11b.32、11b.33、11b.34 を参照</li>
 </ul>
 <h3 id="11b4">11b.4 投げ抜けとため完了の表示</h3>
 <ul>
@@ -740,7 +743,7 @@ pre code { padding:0; background:none; }
 <tbody>
 <tr>
 <td>キャラ</td>
-<td>1ポーズ・1コマ・1配色ごとに一度だけ作って保存。輪郭の太さは <code>max(1, round(pixelScale/2))</code> 回の縁取りで保つ。起動時に <code>Sprites.preload()</code> で先に作る</td>
+<td>1ポーズ・1コマ・1配色ごとに一度だけ作って保存。輪郭の太さは <code>max(1, round(pixelScale/2))</code> 回の縁取りで保つ。起動時に <code>Sprites.preload()</code> で先に作る(選択画面に並ぶキャラの見た目だけ。11b.34)</td>
 </tr>
 <tr>
 <td>背景</td>
@@ -929,12 +932,182 @@ pre code { padding:0; background:none; }
 <ul>
 <li>サマーソルト(<code>moves.config.js</code> の flashkick)の移動を後方→前方に直した(<code>launch.vx</code> を -1.0 → +1.2)。</li>
 <li>仮キャラ5人に専用技と専用ポーズを追加(技ライブラリに追加。<code>advance</code> = 技が出ている間、前へ進む速さ。<code>fighter.js</code> の <code>updateSpecial</code>):MEI「FLY KICK」(→↓↘+キック、水平の飛び蹴り)、BORIS「TACKLE」(←ため→+パンチ、肩から突進)、ISA「SPIN KICK」(→↓↘+キック、反って高く蹴る回転蹴り)、JAX「STRAIGHT」(←ため→+パンチ、踏み込む強打)、PRIYA「CHAKRAM」(←ため→+パンチ、回転する輪を飛ばす掌底。飛び道具の見た目 <code>look: 'ring'</code>)。</li>
-<li>トレーニング:タイトルの TRAINING → キャラ選択(2人目は動かない相手)→ 確認画面。体力・ゲージは減らず、時間・勝敗なし。左上に技リスト(技名とコマンド。コマンドはテンキー表記:6=前 4=後ろ 2=下 8=上 3=前下)。数字キー 1〜9,0 でその技を自動で実演(相手を適切な位置に置き直す)。自分でコマンドを入力しても出せる。Enter で選択画面へ戻る。</li>
+<li>トレーニング:タイトルの TRAINING → キャラ選択(2人目は動かない相手)→ 確認画面。体力・ゲージは減らず、時間・勝敗なし。左上に技リスト(技名とコマンド。コマンドはやじるしの絵で表示(右向きのときの向き))。数字キー 1〜9,0 でその技を自動で実演(相手を適切な位置に置き直す)。自分でコマンドを入力しても出せる。Enter で選択画面へ戻る。</li>
 <li>文字に <code>+</code> <code>&gt;</code> <code>(</code> <code>)</code> を追加。</li>
 </ul>
 <h3 id="11b23">11b.23 ポーズ画面での技の確認</h3>
 <ul>
 <li>対戦中(導入〜戦闘)に Enter(スタート)でポーズ。時間もキャラも止まる。技の一覧(技名・テンキー表記のコマンド)、選んだ技の動きの繰り返し再生(技の発生・持続・硬直の時間どおり)、威力・発生・持続・硬直・ゲージ消費の数値を表示。↑↓で技、←→で1P/2Pの切り替え、もう一度 Enter で再開。実装は <code>battle.js</code> の <code>updatePause</code> と <code>ui.js</code> の <code>drawPause</code>。トレーニングモードはそのまま残してある。</li>
+<li>(11b.24)コマンド表示は数字ではなくやじるしの絵に変更(<code>ui.js</code> の <code>commandTokens</code> / <code>arrowIcon</code> / <code>drawCommand</code>)。ため技は「HOLD ← &gt; → + P」の形。</li>
+</ul>
+<h3 id="11b25">11b.25 強パンチ・強キック(弱/強の攻撃)</h3>
+<ul>
+<li>入力:<code>hpunch</code> / <code>hkick</code> を追加(<code>input.config.js</code>)。キーボード 1P=R/T、2P=I/O。コントローラー X=弱P Y=強P A=弱K B=強K(従来は X,Y がパンチ、A,B がキックだった)。<code>core/input.js</code> は、強ボタンを押すと「弱ボタンも押した」扱いにもする(必殺技・投げ・気絶の連打がそのまま動く)。技の選択は <code>fighter.js</code> の <code>pressedAttack</code>(強を先に見る)。</li>
+<li>技:<code>moves.config.js</code> に standHPunch / standHKick / crouchHPunch / crouchHKick / jumpHPunch / jumpHKick を追加。弱と比べて、リーチ(判定の長さ)が長く(立ちパンチ 26→39、立ちキック 28→40、しゃがみキック 27→37 など)、発生・硬直が遅く、威力・ヒットストップが大きい。強キックとしゃがみ強キックはダウン。威力は、強パンチが立ち 9・しゃがみ 8・ジャンプ 9、強キックが立ち 13・しゃがみ 10・ジャンプ 12(弱は 5/4/6、8/6/8)。弱は表示名を L PUNCH / L KICK に。</li>
+<li>強攻撃はキャラ定義に書かなくても、ライブラリの同名の技が自動で入る(<code>character.js</code>)。キャラごとに変えたいときは <code>overrides</code> に技名で書く。</li>
+<li>ポーズ:6つ追加(<code>sprites.js</code>。構えが大きく、腕・脚が長く伸びる)。CPUも強攻撃を使う(<code>ai.js</code>)。</li>
+<li>(11b.26)強攻撃のモーションを「腕を伸ばすだけ」から「体ごと打撃方向へ持っていく」動きに変更。強パンチは、体ごと後ろへ引いてため → 腰を落として全身で踏み込む。強キックは体を大きく反らして振り抜く。しゃがみ強パンチは伸び上がりながら斜め上へ、しゃがみ強キックは手をついて低く払う。ジャンプ強も体ごと投げ出す形。あわせて、技データに <code>advance</code>(px/フレーム)と <code>advanceFrom</code>(前進を始めるフレーム)を追加し、強攻撃は出る少し前から出ている間、実際に体が前へ進む(<code>fighter.js</code> の <code>updateGroundAttack</code>)。</li>
+</ul>
+<h3 id="11b27-photo">11b.27 写真をもとにしたキャラクター(photo フォルダ)</h3>
+<ul>
+<li>IMAI / KIRA / KOSHIKA / NAKANO / TAKAHASHI を追加(名前=フォルダ名)。NAKAGAWA は写真に合わせて水色シャツ・縞ネクタイ・肌色を補正。</li>
+<li>casual スタイルに髪 curly/wavy/side/slick、毛先色 H、袖まくり top:'rolled'、opts.tie / tieStripe / lanyard / jacket を追加。</li>
+<li>選択画面は5列×3行(CELL 26×30)。技構成は仮。(2026-11-20 に6列×3段へ変更。11b.34)</li>
+</ul>
+<h3 id="11b28-style-vec">11b.28 手描き調の絵(<code>style: 'vec'</code>)</h3>
+<ul>
+<li><code>js/data/vec.js</code> を追加。関節のポーズから、Canvas2D で3倍の細かさのベクター絵(ふくらんだ体、3段の陰影、髪の型、顔の表情)を描き、ゲームの細かさ(pixelScale)の点に落として輪郭を付ける。<code>sprites.js</code> の <code>paint</code> の先頭で <code>style === 'vec'</code> をここへ回す。</li>
+<li>見た目の指定は <code>Game.Data.Looks.名前 = { style: 'vec', opts: {...}, palettes: [...] }</code>。<code>palettes.js</code> に <code>nakagawa_v</code>、<code>takahashi_v</code> がある。キャラ定義(<code>characters.config.js</code>)の <code>sprite</code> にその名前を書くと使われる。</li>
+<li>opts の主なもの: 髪型 <code>hair</code>(recede / slick / high など)、<code>glasses</code>、<code>tie</code>、<code>tieStripe</code>、<code>lanyard</code>、<code>rolled</code>(袖まくり)、<code>belly</code>、<code>thick</code>、<code>legThick</code>、<code>faceRx</code> / <code>faceRy</code>(顔の大きさ)、<code>headScale</code>、<code>smile</code>、<code>shoe</code>。パレットのキーは、肌 s / 髪 h / シャツ g / ズボン t / ネクタイ n / ベルト b / 金具 m / 靴 x / メガネ f / 白 w / ストラップ a / 社員証 q / 目 e / 輪郭 o。<code>drawFx</code> のために c / C / k / K も必要(<code>vecBase</code> が入れる)。</li>
+<li>骨格(関節)は従来と同じなので、攻撃判定、喰らい判定、フレーム数には影響しない。見た目だけが変わる。</li>
+<li>現状は NAKAGAWA と TAKAHASHI が手描き調。ほかのキャラは従来のカジュアル絵のまま。</li>
+<li><code>takahashi_v</code> は、額の広さ、後退した生え際、細長い輪郭、笑顔を写真から拾って描く(髪型 <code>high</code> を追加)。</li>
+</ul>
+<h3 id="11b29">11b.29 写真から顔・体の絵を作る試み(採用しなかった)</h3>
+<ul>
+<li><code>tools/photo_face.py</code>(切り抜き写真 → <code>assets/face_名前.data.js</code>)と <code>tools/photo_parts.py</code> + <code>tools/parts_takahashi.json</code>(写真から頭・胴・腕・脚・靴のパーツ → <code>assets/parts_takahashi.data.js</code>)を追加。人物の切り抜きは rembg(<code>u2net_human_seg</code>)。<code>vec.js</code> は <code>opts.face</code> / <code>opts.tex</code> で、これらの画像を顔や体に貼れる。</li>
+<li>結果: 顔だけ写真を貼ると体の絵と質感が合わず浮く。体まで写真のパーツで作る人形方式は、側面と正面の2方向の素材しかなく、貼り合わせ感が強く、蹴りやしゃがみで破綻しやすいため、採用しなかった。<code>takahashi_v</code> は写真テクスチャをやめ、写真の特徴を手描き調で描く形にした。</li>
+<li>コードと生成データは残してある(<code>opts.tex</code> を外しているだけ)。</li>
+<li>画面でのキャラの高さは約50ドットで、顔は10ドット前後。写真そのものの再現はできないため、「本人と分かる特徴を描く」ことを目標にした。</li>
+</ul>
+<h3 id="11b30-aigemini">11b.30 画像生成AI(Gemini)でスプライトの元絵を作る手順(試験は中止。2026-11-19 に見送り)</h3>
+<ul>
+<li>流れ: 写真 → キャラ絵(基準絵) → 骨格ガイドを渡してポーズ別に生成 → 緑(#00FF00)の背景を除去 → 大きさと足元の位置をそろえる → スプライトシート(<code>style: 'sheet'</code>、<code>assets/README.md</code>)として取り込む。</li>
+<li>素材: 指示文は <code>docs/Gemini指示文.md</code>(プロジェクトの <code>claude/gemini_sprite_prompt.md</code> にも同じものがある)。骨格ガイド4枚(待機、パンチ、キック、被弾。1024×1024、1単位=14px、足元は(380, 900))は <code>docs/pose_guides/gemini/</code>。</li>
+<li>試験の結果(2026-11-12): 基準絵は背景の除去が問題なくできた。実写風の基準絵は約6頭身で、ゲームの骨格(約4.3頭身)と合わないため、「約4.5頭身にデフォルメ」と指示して約4.6頭身になった。ただし待機はガイドのポーズに従わず、基準絵のままだった(体の差分は約1.5%)。次は、パンチでガイドに従うかを確認する。</li>
+<li>取り込み側の細かさ: シートの <code>artScale</code> は「絵の1ドットがゲーム座標の何分の1か」。<code>pixelScale</code> が 4 なら、<code>artScale</code> 4(1単位が4ドット、キャラの高さ約200px)までは、取り込み側の改修なしで使える。</li>
+<li>注意: 同僚の写真を外部サービスに渡すので、本人の了承と各サービスの利用規約(商用利用の可否)を確認する。Nano Banana は、Gemini アプリの無料枠なら無印(Nano Banana 2)が使える。Pro は有料。</li>
+</ul>
+<h3 id="11b31-pc-2026-11-13">11b.31 PC 側にだけあるファイル(2026-11-13 時点)</h3>
+<ul>
+<li><code>assets/nakagawa_sheet.data.js</code>、<code>nakagawa_sheet_1p.png</code>、<code>nakagawa_sheet_2p.png</code>、<code>assets/nakagawa_src/*.aseprite</code>: NAKAGAWA の全35ポーズ・97コマのスプライトシート(<code>artScale</code> 2、1コマ 160×160、足元(80, 130))。<code>index.html</code> と <code>characters.config.js</code> にまだ接続していないため、ゲームでは使われていない。</li>
+<li><code>photo/nakagawa_pixel/</code>: ドット絵の画像11枚。</li>
+</ul>
+<h3 id="11b32-nakagawa-2026-11-19">11b.32 手描き調の見た目を写真に近づける(NAKAGAWA、2026-11-19)</h3>
+<ul>
+<li>方針: 画像生成AI(Gemini)の利用は見送り(11b.30 は経緯の記録)。手描き調(<code>style: 'vec'</code>)のまま、写真の特徴を描き込む。まず NAKAGAWA で検証した(<code>palettes.js</code> の <code>nakagawa_v</code>)。</li>
+<li>体型は「スマート」: <code>belly: 0</code>、シャツの腰 <code>waist</code>(0.86)・胸 <code>chestK</code>(1.08)、腕 <code>armK</code>、スラックスの裾の絞り <code>taper</code>、靴 <code>shoeK</code>、頭 <code>headScale</code>。奥の腕は <code>armBehind: true</code> で胴の後ろに描く(腕が2本に見えない)。</li>
+<li>顔: 角ばった広い輪郭 <code>faceN</code>(スーパー楕円。2で楕円、大きいほど四角)と <code>faceRx</code> / <code>faceRy</code>、広いおでこのつや <code>shine</code>、髪 <code>hair: 'nak'</code>(後退した生え際、後ろに残る短髪)、細い四角のメガネ <code>glasses: 'rect'</code> + <code>glassW</code> / <code>glassH</code> / <code>glassLine</code>、細い目 <code>eyeK</code> + <code>calm</code>(笑い目ではなく、ゆったりした開いた目)、丸い鼻 <code>nose: 'round'</code>、閉じた微笑み <code>mouthClosed</code>、細い眉 <code>browW</code>。顔が細いときに口がはみ出さないよう <code>mouthFit</code>。</li>
+<li>服・小物: 無地のシャツ(<code>stripe: false</code>、襟 <code>w</code> もシャツと同じ色)、ネクタイの斜め縞 <code>tieDiag</code> + <code>tieStripeW</code>、タイピン <code>tieClip</code>、剣先の縁取り(パレットの <code>p</code>)、前タックの折り目 <code>pleat</code>、紐つきの革靴 <code>shoe: 'derby'</code>。</li>
+<li>色は写真から目で決めた(肌 #e6b48e、髪 #2a2220、シャツ #d3d6ee、ネクタイ #1c2250 に白縞、メガネ #7a5a48)。1P は写真の色、2P は白シャツ・えんじのネクタイ・グレーのスラックス。</li>
+</ul>
+<h3 id="11b33-2026-11-19">11b.33 人形っぽさを減らす描き方(2026-11-19)</h3>
+<ul>
+<li>手足を1本の形で塗る <code>limb</code>(<code>vec.js</code> の <code>limbPath</code>): 関節ごとのカプセルを重ねる代わりに、肩〜手首、付け根〜足首の縁をつないだ1つの形にする。ひじ・ひざに円のつなぎ目が出ない。値は外側の丸みを減らす割合(0〜1)。</li>
+<li>陰影と輪郭のやわらげ: <code>soften</code>(0〜1。影・ハイライトの帯を細く、色の差を小さくする)と <code>outline: { dark, fade, thick }</code>(<code>sprites.js</code> の <code>toCanvas(ol)</code> に引数を追加。輪郭を、隣の体の色に黒を <code>dark</code> だけ混ぜた色にし、外側の1ドットは濃さ <code>fade</code> の半透明にする)。<code>outline</code> を書かない見た目は従来どおりの輪郭。</li>
+<li>シャツをズボンに入れた腰 <code>tuck</code>: シャツをベルトの位置で止め、そのあとにスラックスを描く。スラックスはベルトの高さで横にまっすぐ切れ、腰骨に向かってなだらかに広がる(後ろ側はやや狭い)。ベルトの上にシャツが少しかぶさる。<code>wrinkles</code> でベルトまわりのしわ。</li>
+<li>肩のぼかし <code>shoulderSoft</code>(0〜1): 前の腕の付け根の影・ハイライトを、シャツの色の放射グラデーションで胴になじませる。</li>
+<li>いずれも既定は無効なので、ほかの見た目(<code>takahashi_v</code> を含む)は変わらない。<code>takahashi_v</code> への適用と、残りの人への展開は未実施。(2026-11-20 に <code>takahashi_v</code> を含む残りの8人へ展開した。11b.34)</li>
+<li>確認: 全キャラ・全コマ・2パレット(2910枚)の生成と、タイトル → 選択 → VS → 対戦の遷移でエラーなし。対戦画面でも表示を確認した。</li>
+</ul>
+<h3 id="11b34-8-2026-11-20">11b.34 残りの写真キャラ8人を同じ作りで追加(2026-11-20)</h3>
+<ul>
+<li>残りの8人(IMAI / ISHII / KIRA / KOSHIKA / MATSUZAKI / NAKANO / SASAKI / TAKAHASHI)を、NAKAGAWA と同じ作り方(体型・顔・服・小物を写真から拾い、<code>limb</code> / <code>soften</code> / <code>outline</code> / <code>shoulderSoft</code> / <code>armBehind</code> / <code>mouthFit</code> を共通で適用)で <code>palettes.js</code> に追加した。名前は <code>imai_v</code> など <code><名前>_v</code>。共通の指定は <code>VEC_SOFT</code>、書き方は <code>vecLook(opts, palettes)</code>。それぞれ1P・2Pの2配色。<code>takahashi_v</code> も同じ作りに更新した。</li>
+<li>人ごとの特徴: IMAI=ボリュームのあるくせ毛 <code>curlyBig</code>、あごひげ <code>beard</code>、目の下のくま <code>bags</code>、黄色いネームストラップ、水色シャツ(2P は白)。ISHII=短く整えた髪 <code>crop</code>、細面、青いプリントの半袖 <code>sleeve</code> + <code>texture: 'print'</code>、カーキの九分丈 <code>crop</code> と濃い色のソックス <code>sk</code>。KIRA=整ったマッシュ <code>kira</code>、細い黒フレームのメガネ、大きな笑顔、紺のジャケット <code>jacket</code> + 黒いニット <code>i</code>、茶色の革靴。KOSHIKA=胸までの長い髪で毛先ほど明るい金髪(パレットの <code>H</code>。後ろの髪と前に垂れる毛束にグラデーション)、まつげ <code>lash</code>、Vネック <code>vneck</code> のゆったりしたニット、裾のリブ <code>hemRib</code>、黒いフレアパンツ(<code>taper</code> を負にして裾を広げる)。MATSUZAKI=肩までのボブ <code>bob</code>、まつげ、グレーのニット(2P はクリーム色の花柄 <code>texture: 'print'</code> + <code>pr</code> / <code>pr2</code>)。NAKANO=横に流した髪 <code>swept</code>、細いハーフリムのメガネ <code>glasses: 'half'</code>、縞のシャツの袖まくり <code>sleeve</code> + <code>rolled</code>、胸ポケットとスマホ <code>pocket</code>、裾を出した <code>hem: 'flat'</code>、紺のパンツとクリーム色のスニーカー。SASAKI=ふんわりしたくせ毛 <code>mop</code>、太い眉、満面の笑み、ボアのフリース <code>texture: 'fluff'</code>、黒いジョガーパンツ、はだし(靴の色を肌色にしている)。TAKAHASHI=M字に後退した生え際 <code>tk</code>、白シャツの袖まくり、斜め縞のネクタイ、赤いネームストラップ、ゼブラ柄の靴 <code>shoe: 'zebra'</code>(写真のゼブラ柄のソックスの代わり)。</li>
+<li><code>vec.js</code> に追加した指定(いずれも既定は従来どおり): 袖の長さ <code>sleeve</code>(0〜1が上腕、1〜2が前腕)、ズボンの丈 <code>crop</code>(0〜1。ソックスはパレットの <code>sk</code>、なければ肌色)、シャツの裾を水平に切る <code>hem: 'flat'</code>(<code>hemAt</code>、<code>hemK</code>)とリブ <code>hemRib</code>、<code>vneck</code>、<code>jacket</code>(前あきから中のトップス <code>i</code> が見える)、柄 <code>texture: 'print'</code>(パレット <code>pr</code>、<code>pr2</code>、<code>printCell</code>、<code>printDensity</code>)と <code>'fluff'</code>、ベルトなし <code>belt: false</code>、まつげ <code>lash</code>、目の下のくま <code>bags</code>、ハーフリムのメガネ、ゼブラ柄の靴、髪 <code>kira</code> / <code>swept</code> / <code>mop</code> / <code>tk</code> / <code>curlyBig</code> / <code>crop</code>。手足の端を平らに切る <code>limbPath(…, flatEnd)</code>。</li>
+<li>キャラ一覧(<code>characters.config.js</code>): <code>imai</code> / <code>kira</code> / <code>koshika</code> / <code>nakano</code> の <code>sprite</code> を <code>*_v</code> に切り替え、<code>ishii</code> / <code>matsuzaki</code> / <code>sasaki</code> を新しく追加した(技は仮。<code>straight</code> / <code>spinKick</code> / <code>chakram</code> / <code>flyKick</code> などを割り当てた)。<code>order</code> は全16人。(2026-11-20 に、このうち仮キャラ5人と <code>hero_sheet</code> を削除。11b.35)</li>
+<li>選択画面: 16人が入るよう、1段を6人にして3段にした(<code>COLS</code> 6、<code>CELL</code> 22×30、間隔 24×33、左端 121)。下の段が短いとき、「下」で最後のキャラへ移れるようにした。</li>
+<li>起動時の事前描画(<code>Sprites.preload()</code> / <code>warm()</code>)は、選択画面に並ぶキャラが使う見た目(と予備の <code>hero</code>)だけにした。使われていない見た目は、使われたときに <code>get</code> が描く。見た目の数が増えても起動が遅くならないため。テスト環境では、8人を足すと起動が約15秒から約32秒に伸びたので、この変更で約15秒に戻った。</li>
+<li>確認: 全見た目・全コマ・2パレット(4268枚)の生成と、タイトル → 選択 → VS → 対戦の遷移でエラーなし。全16キャラで対戦を開始して技を出し、エラーなし。比較画像(写真の顔と並べたもの)で髪・顔・服を確認した。</li>
+<li>未実施・注意: 写真との一致は目で見て調整したもの(似顔絵ではなく、特徴の拾い出し)。技の性能は仮。ISHII / MATSUZAKI / SASAKI のステージは仮で <code>street</code>。NAKAGAWA の個別シートの接続(11b.31)は未実施。</li>
+</ul>
+<h3 id="11b35-2026-11-20">11b.35 サンプルキャラクターの削除(2026-11-20)</h3>
+<ul>
+<li>サンプルとして入れていたキャラを一覧から削除した: <code>hero_sheet</code>(画像シートで動くことの確認用。札は SAMPLE)と、仮キャラ5人(<code>mei</code> / <code>boris</code> / <code>isa</code> / <code>jax</code> / <code>priya</code>)。<code>characters.config.js</code> の定義と <code>order</code>、<code>palettes.js</code> の各見た目を消した。</li>
+<li>残したもの: <code>hero</code>(道着。予備の見た目としても使う)、写真の9人、<code>assets/</code> の画像と <code>hero_sheet.data.js</code>(画像シートの作り方の見本。<code>assets/README.md</code> が参照している)、<code>index.html</code> の読み込み行。</li>
+<li>影響: 一覧は10人になった(選択画面は6列×3段のまま、空きは「?」)。ステージ <code>scramble</code>(SCRAMBLE CROSSING)は <code>hero_sheet</code> だけが使っていたので、どのキャラからも選ばれなくなった(定義は残してある)。</li>
+<li>戻すとき: <code>Claude outputs\backup_20261120_before_remove_samples</code> に、削除前の <code>characters.config.js</code> と <code>palettes.js</code> がある。</li>
+<li>確認: 全見た目・全コマ・2パレット(3104枚)の生成、タイトル → 選択 → VS → 対戦の遷移、全10キャラでの対戦開始と技の発動でエラーなし。</li>
+</ul>
+<h3 id="11b36-imai-2026-11-20">11b.36 IMAI のひげを薄い無精ひげに(2026-11-20)</h3>
+<ul>
+<li>IMAI のひげを、濃いあごひげから、写真に近い薄い無精ひげに変えた。<code>vec.js</code> の <code>beard</code> に <code>'stubble'</code> を追加した(<code>true</code> は従来のあごひげのまま)。顔の輪郭の内側に、髪の色を肌に混ぜた小さな点を散らして描く。点の密度は、あごの先が高く、下あごは低い。口ひげは描かない(<code>mustache: true</code> を指定したときだけ、口の上に薄く描く)。<code>stubble</code>(下あごの密度)と <code>stubbleMix</code>(点の色。0〜1、小さいほど髪の色に近い)で調整できる。</li>
+<li><code>palettes.js</code> の <code>imai_v</code> を <code>beard: 'stubble'</code> にした。全見た目・全コマ・2パレット(3104枚)の生成と画面遷移でエラーなし。</li>
+</ul>
+<h3 id="11b37-imai-2026-11-20">11b.37 IMAI の髪を細かいカールに(2026-11-20)</h3>
+<ul>
+<li>IMAI の髪を、大きな円5〜6個の集まり(もこもこした見た目)から、細かいカールの質感に作り替えた。<code>vec.js</code> の髪型 <code>curlyBig</code>: 輪郭に細かなこぶをつけた1枚の形(<code>smoothPath</code> / <code>bumpArc</code> で作る)を、後ろの髪と前の髪(前髪がおでこにかかる)に使い、その中に小さな弧のカール(<code>curlyDetail</code>)を、濃い線とハイライトで描き込む。カールの位置は決め打ちの乱数なので、コマが変わってもちらつかない。</li>
+<li>全見た目・全コマ・2パレット(3104枚)の生成と、VS画面・対戦画面での表示を確認した。ほかのキャラの髪は変わらない(<code>curly</code> は従来のまま)。</li>
+</ul>
+<h3 id="11b38-ishii-2026-11-20">11b.38 ISHII を写真に近づける(2026-11-20)</h3>
+<ul>
+<li>ISHII を写真に合わせて作り直した(<code>palettes.js</code> の <code>ishii_v</code>)。髪は、グレーがかった黒の短髪で、側頭部と後ろは刈り上げ(髪型 <code>crop</code> を短くし、<code>hairFade</code> で髪の色の点を散らす)。頬の赤みを弱めた(<code>blush</code>)。あごにうっすら無精ひげ(<code>beard: 'stubble'</code> + <code>stubble</code>、<code>stubbleMix</code>、<code>chinK</code>)。シャツは青と白の細かいプリント(<code>printCell</code>、<code>printDensity</code>、<code>printAlt</code>)で、パンツの丈を短くして(<code>crop</code> 0.55)すねと濃い色のソックスが見えるようにした。</li>
+<li><code>vec.js</code> に追加した指定(既定は従来どおり): <code>hairFade</code>(刈り上げ)、<code>blush</code>(頬の赤みの強さ。0で無し)、<code>chinK</code>(あごひげの濃さの倍率)、<code>printAlt</code>(プリントの2色目の割合)、<code>vneckD</code>(Vネックの深さ。ISHII では襟元の開きを試したが、ポーズによって肩の下に肌の三角が出たので使っていない)。</li>
+<li>(同日、髪をさらに短くして丸刈りにした。新しい髪型 <code>shave</code> は、頭の形(顔の楕円)より1.7だけ大きい薄い帽子形で、横と後ろも同じ長さ。毛は点(濃い点+地肌のつぶ)で描き、生え際は肌色の点で毛をまばらにしてぼかす。オプション: <code>shaveT</code>(毛の厚み)/<code>shaveSoft</code>(生え際のぼかし幅)/<code>shaveMix</code>(地肌の透け具合)/<code>shaveDark</code>(濃い点の量)。<code>crop</code>+<code>hairBuzz</code>+<code>hairFade</code> の組み合わせは他の人用に残してある。)確認: 全見た目・全コマ・2パレット(3104枚)の生成と画面遷移でエラーなし。</li>
+</ul>
+<h3 id="11b39-kira-2026-11-20">11b.39 KIRA を写真に近づける(2026-11-20)</h3>
+<ul>
+<li>KIRA を写真に合わせて作り直した(<code>palettes.js</code> の <code>kira_v</code>)。髪は、頭に沿った黒髪で、前髪がおでこに3〜4本の毛束になって下りる。形(<code>HAIR.kira</code>)は、後ろと上の盛り上がりを減らし、前髪の下の縁を不ぞろいにした。耳の上までサイドの髪がかかる。以前の、お椀を伏せたような黒い塊をやめ、頭のカーブに沿う「つや」の帯と、前髪・後ろの短い毛束を <code>pal.hh</code> の明るい線で描き足した(<code>vec.js</code> の kira 専用の描き込み)。頬の赤みを弱め(<code>blush</code> 0.6)、目の開きを少し細くした(<code>eyeK</code> 0.66)。</li>
+<li>ジャケットは細かい織り目(<code>texture: 'print'</code>、<code>printCell</code> 0.7、<code>printDensity</code> 0.2。粒の色はジャケットより少しだけ明るい/暗い)にした。丈を腰骨より少し下まで伸ばした(<code>hemAt</code> 1.12、<code>hemK</code> 1.04)。ジャケットの前あきの黒いニットは、縦の長い帯をやめて、首元から下へ細くなるV字にした(新しい指定 <code>jacketV</code>。0.5は「半分の長さまでV字」。既定の1は従来どおりの帯)。</li>
+<li>(同日)鼻を少し高くした。新しい指定 <code>noseK</code>(1=従来。大きいほど、鼻の根もとが高くなり、先が前へ出て、鼻すじに細いハイライトが入る)を KIRA に 1.6 で使っている。確認: 全見た目・全コマ・2パレット(3104枚)の生成と、10人全員の対戦画面でエラーなし。</li>
+</ul>
+<h3 id="11b40-koshika-2026-11-20">11b.40 KOSHIKA を写真に近づける(2026-11-20)</h3>
+<ul>
+<li>KOSHIKA を写真に近づけた(<code>palettes.js</code> の <code>koshika_v</code>)。髪の根もとを少し明るい茶色にして、毛先のブロンド(<code>pal.H</code>)をより明るくした。グラデーションを始める高さを早め(あごの高さから)、胸の高さにはほぼブロンドになる。後ろの髪と前の髪に、毛束の筋(<code>pal.hh</code>)を薄く描き足した(<code>vec.js</code> の <code>headBack</code> と <code>head</code> の <code>long</code>)。頭の上には、頭のカーブに沿う「つや」の帯を入れた。</li>
+<li>目を開いた形に戻して(<code>eyeK</code> 1)、眠たそうな見た目をやめた。頬の赤みを弱めた(<code>blush</code> 0.6)。グレーのニットに、ごく細かい毛糸の織り目(<code>texture: 'print'</code>、<code>printCell</code> 0.55、<code>printDensity</code> 0.22。粒の色はニットに近い明るい/暗い色)をつけた。</li>
+<li>(同日)髪の位置を直した。胸の前に垂れていた束は、肩(腕)の後ろに半分隠れて、肩の中に入り込んで見えたため、背中側に回した。背中側の髪(<code>HAIR_BACK.long</code>)は少し幅を広げ(下の端で約45)、長さは腰(ニットのすそ)の高さまでにした(頭の中心から下へ約130。毛先のブロンドは約108でほぼ全体になる)、新しい指定 <code>hairOverTorso</code> で、胴体や奥の腕より手前(胴体の背中側をおおう。顔と手前の腕よりは後ろ)に描くようにした(<code>vec.js</code> の <code>paint</code>)。KOSHIKA は <code>hairOverTorso: true</code>、<code>hairFront: false</code>。胸の前の束(<code>HAIR_FRONT.long</code> と <code>hairFront()</code>)は、指定 <code>hairFront: false</code> で描かない(コードは残してある)。確認: 全見た目・全コマ・2パレット(3104枚)の生成と、10人全員の対戦画面でエラーなし。</li>
+</ul>
+<h3 id="11b41-matsuzaki-2026-11-20">11b.41 MATSUZAKI を写真に近づける(2026-11-20)</h3>
+<ul>
+<li>MATSUZAKI を写真に近づけた(<code>palettes.js</code> の <code>matsuzaki_v</code>)。髪(ダークブラウンのボブ)を、肩に届く長さにして、毛先が斜めに外へはねる形にした(<code>HAIR_BACK.bob</code>)。髪は KOSHIKA と同じ <code>hairOverTorso: true</code> で、胴体の背中側をおおうように手前に描く。髪の色は少し明るい茶色にし、頭のカーブに沿う「つや」の帯と毛束の筋を薄く描き足した(<code>vec.js</code> の <code>head</code> と <code>headBack</code> の <code>bob</code>)。</li>
+<li>頬の赤みを弱め(<code>blush</code> 0.55)、目の開きを少し大きくした(<code>eyeK</code> 0.85)。グレーのニットに、細かい毛羽のような粒(<code>texture: 'print'</code> の <code>pr</code>/<code>pr2</code> をグレー系にした)をつけて、写真のざっくりしたニットに寄せた。2Pのクリーム色の花柄ブラウスは変更なし。</li>
+<li>(同日)顔を面長にした。新しい指定 <code>faceLow</code>(顔の下半分=目から下の縦の半径の倍率。1=従来)、<code>mouthDy</code>(口を下げる量)、<code>headDy</code>(頭全体を上下にずらす量。マイナスで上)を追加し、MATSUZAKI は <code>faceRx</code> 28.5、<code>faceLow</code> 1.16、<code>mouthDy</code> 2.2、<code>headDy</code> -0.75 にした。あごが肩のニットに隠れて面長が分かりにくくなるため、頭を少し上げている。確認: 全見た目・全コマ・2パレット(3104枚)の生成と、10人全員の対戦画面でエラーなし。</li>
+<li>(同日)MATSUZAKI だけ大きさを0.9倍(1割小さく)した。キャラごとの新しい指定 <code>scale</code>(<code>characters.config.js</code>。書かなければ1。足元を中心に拡大・縮小する)を追加し、MATSUZAKI に <code>scale: 0.9</code> を書いた。全員に一括で効かせる指定 <code>characterScale</code>(<code>display.config.js</code>。既定1)も用意した。実際の倍率は「キャラの <code>scale</code> × <code>characterScale</code>」で、<code>js/game/character.js</code> が計算して <code>char.scale</code> に入れる。</li>
+<li>絵だけでなく当たり判定も同じ倍率にした(足元が原点なので、足元を中心に拡大・縮小)。体の寸法(<code>bodyWidth</code> 24、<code>standHeight</code> 48、<code>crouchHeight</code> 32。押し合い・画面端・しゃがみの高さに使う)は <code>character.js</code> で倍率を掛ける。喰らい判定(頭・胴・脚・腕の箱)と攻撃判定の箱は <code>js/game/combat.js</code> で倍率を掛ける。投げが届く距離(<code>range</code>)は <code>fighter.js</code> の <code>canGrab</code> で、飛び道具の出る位置(<code>offsetX</code>/<code>offsetY</code>)は <code>projectile.js</code> で、持ち主の倍率を掛ける。描画(<code>renderer.js</code>)とポーズメニューの技プレビュー(<code>ui.js</code>)は、同じ <code>char.scale</code> を使う。MATSUZAKI の数値は、体の幅 21.6・立ち 43.2・しゃがみ 28.8、立ちパンチの箱 18×7.2、投げの距離 28.8、飛び道具(CHAKRAM)の出る位置 約19.8, -30.6。</li>
+<li>倍率に合わせないもの: 歩く速さ・ジャンプの高さ・技の発生や硬直のフレーム、飛び道具の大きさと速さ。倍率1のキャラは、判定の数値が従来とまったく同じ。キャラ選択・対戦前の顔の絵は枠に合わせて描くため、大きさは変わらない。確認: 全見た目・全コマ・2パレット(3104枚)の生成と、10人全員の対戦画面でエラーなし。判定の箱を表示して、絵に合っていることも確認した。</li>
+</ul>
+<h3 id="11b42-seibu-front-2026-11-20">11b.42 ステージ「SEIBU FRONT」を手描きで追加(2026-11-20)</h3>
+<ul>
+<li>駅前の通りの写真(<code>photo/stages/seibu_front.png</code>、1536×835。左に商店、中央に白いデパート、右にガラスの囲い、手前に道路)をもとにした新しいステージ。写真は使わず、これまでの手描きのステージ(11b.15〜11b.18、11b.43)と同じく、形をデフォルメして自動で描く <code>js/render/stageSeibu.js</code>(<code>Game.Render.StageSeibu</code>)にした。<code>index.html</code> に script を1行足し、<code>display.config.js</code> の <code>stage.list.seibu</code> を <code>{ builder: 'StageSeibu', name: 'SEIBU FRONT' }</code> にした。</li>
+<li>経緯: 最初は、sasaki さんの背景(<code>docs/ほかのメンバーの成果物管理/fighting-game_sasaki_</code> の <code>stage1.jpg</code>)を減色して登録した。次に、この写真を <code>tools/make_stage_photo.py</code> で、sasaki さんの背景の彩度・明るさ・コントラストに合わせた写真の背景にした。しかし依頼は「色合いではなく、写真の感じをなくしてほしい」だった(sasaki さんの背景は写真そのもので、色味を合わせても写真に見えるまま)。そのため、写真のままの背景をやめ、絵として描き起こした。</li>
+<li>描いたもの(層は奥から): 空(青のグラデーション、流れる雲)/ 遠景(左の白いビルと赤い丸い看板、縦のネオンのある暗いビル、赤茶のビル、街路樹)/ 建物(曲線のバルコニーのある白い低い棟、斜めの青い看板帯と縦のたれ幕のある白い塔、茶色の壁、右の白いビル)/ 道路(アスファルト、奥へ伸びる白線と破線、路面の矢印。視差で動かない)/ 足元の物(ガードレール、進入禁止の標識、黒いタクシー、左の車)/ 右の囲い(向こうの低木と人影、ガラス、柱、灰色の壁、縁石)。</li>
+<li>動き: 雲が流れる。奥の道路を白いバンが右へ走る。囲いの向こうの人影が身じろぎし、煙が立ちのぼる。視差は、空 0.08・遠景 0.2・建物と車 0.45・囲い 0.8(道路は動かない)。2人が端にいても背景の端が欠けないことを確認した。</li>
+<li>看板には文字も実在のロゴも描かず、白いかたまりと色の帯で表している(元の写真に写っている看板や、Google の透かしは、絵には入らない)。そのため、公開・配布のときにも写真の権利の心配がなくなった。</li>
+<li>使わなくなったファイル(2026-11-26 に削除した。写真は photo/stages に残っているので、tools/make_stage_photo.py で作り直せる): <code>assets/stage_seibu.png</code>(sasaki さんの写真を減色したもの)、<code>assets/stage_seibu.jpg</code>(写真の背景)、<code>assets/stage_ikebukuro_smoking.png</code>。<code>tools/make_stage_photo.py</code>(写真を写真のまま背景にするツール)は、今後の用途のために残してある。</li>
+<li>確認: 全見た目・全コマ・2パレット(3104枚)の生成、10人全員の対戦画面、B キーでの全ステージの切り替え、選択画面の予告(名前 SEIBU FRONT)、対戦前の画面で、エラーなし。</li>
+</ul>
+<h3 id="11b43-smoking-area-2026-11-20">11b.43 ステージ「SMOKING AREA」(喫煙所の囲い)を手描きで追加(2026-11-20)</h3>
+<ul>
+<li>当初は <code>photo/stages/ikebukuro_smoking.png</code>(1355×877 の写真。池袋の喫煙所前)を <code>tools/make_stage.py</code> で縮小・減色した画像(<code>assets/stage_ikebukuro_smoking.png</code>)を登録したが、ほぼ写真そのままで、キャラの絵柄と合わなかった。色を 14〜28 色に減らして色の境目に輪郭線を引く自動加工も試したが、等高線のようなまだら模様になり採用しなかった。写真の自動加工では、ゲーム向けの絵にするのは難しい(ガラス越しの映り込みとぼかした人物が多い写真は特に)。</li>
+<li>そこで、これまでの4ステージ(11b.15〜11b.18)と同じく、写真をもとに形をデフォルメして自動で描くステージ <code>js/render/stageSmoking.js</code>(<code>Game.Render.StageSmoking</code>)にした。<code>index.html</code> に script を1行足し、<code>display.config.js</code> の <code>stage.list.smoking</code> を <code>{ builder: 'StageSmoking', name: 'SMOKING AREA' }</code> にした。</li>
+<li>描いたもの: くもり空と流れる雲、遠くのビル(白いビルと紺色の縦看板、ガラスのビル、赤いカラオケ看板と丸い看板のビル、茶色のビル、右の白い百貨店と緑の壁)、黒い枠のガラスの囲い(左右。黒い柱と上の枠、反射のすじ、向こうの低木とぼやけた人影)、SMOKING AREA の看板と青・黄の注意書き、黒い植栽ボックス、中央の出入り口から見える喫煙スペース(つるの壁、しまのシャツの人・立つ人・座る2人、立ちのぼる煙)、出入り口の段差、大きな敷石の歩道(濃淡のむら、銀色の板)。写真の構図を左・中央・右に並べ直し、囲いを低くして街並みが見えるようにした(写真では囲いが画面いっぱいになるため)。</li>
+<li>視差: 空 0.08、遠景 0.2、囲いの向こう 0.5、囲い 0.8、歩道は動かない。2人が画面の左右の端にいるときに、層のすき間が出ないことを確認した。動き: 雲、喫煙スペースの人の身じろぎ、煙。</li>
+<li>確認: 全見た目・全コマ・2パレット(3104枚)の生成と、10人全員の対戦画面でエラーなし。対戦・選択画面・対戦前の画面で、背景と名前が出ることも確認した。</li>
+<li>写真ほぼそのままの <code>assets/stage_ikebukuro_smoking.png</code> は、ステージ一覧から外し、2026-11-26 に削除した。</li>
+</ul>
+<h3 id="11b44-gemini-2026-11-20">11b.44 ステージ背景は Gemini で描き直す方針に(2026-11-20)</h3>
+<ul>
+<li>11b.42 の SEIBU FRONT(色味を合わせた写真の背景 → 手描きの背景)は、どちらも「全然合わない」とのことだった。sasaki さんの背景(<code>stage1.jpg</code>、3488×1216)を原寸で見ると、看板が「SEBUBU」のように崩れ、たれ幕の文字も読めない形で、写真を画像生成AIで描き直したものとみられる。<code>docs/stage_by_gemini/</code> の <code>ikebukuro_karakan.jpg</code>(ドット絵風)と <code>shibuya_109.jpg</code>(線画風)も、同じ Gemini で作った絵(1408×752)。</li>
+<li>写真の色を整えるだけ(11b.42 の最初の案)でも、コードで形を描く(現在の <code>StageSeibu</code>)でも、細部を描き直した絵の見た目にはならない。この見た目は、Gemini(Nano Banana)に描き直してもらうのが近道、と整理した。</li>
+<li>そのための指示文を <code>docs/Gemini指示文_ステージ背景.md</code> に作った(同じ内容を、プロジェクトの <code>claude/gemini_stage_prompt.md</code> にも保存)。元の写真(<code>photo/stages/seibu_front.png</code>)と、画風の見本(sasaki さんの <code>stage1.jpg</code>、またはドット絵風の <code>ikebukuro_karakan.jpg</code>)の2枚を添付して送る。</li>
+<li>出てきた画像は、<code>tools/make_stage_photo.py 生成画像 assets/stage_seibu_ai.jpg --sat 1 --gamma 1 --contrast 1 --sharp 0</code> で色を変えずに取り込み、<code>stage.list.seibu</code> の <code>image</code> に差し替える(1408×752 のまま使える。試しに <code>ikebukuro_karakan.jpg</code> で 1648×896 になることを確認した)。差し替えるまでは、手描きの <code>StageSeibu</code> をそのまま使う。</li>
+<li>元の写真は Google のストリートビューとみられ、「© 2026 Google」の透かしがある。公開・配布するなら、自分で撮った写真か、使用許可のある写真から作り直す。</li>
+</ul>
+<h3 id="11b45-brave-fighters-2026-11-25">11b.45 kira さんのキャラ「タカハシ」「ケンタロウ」を取り込む(2026-11-25)</h3>
+<ul>
+<li>依頼: 「<code>docs/ほかのメンバーの成果物管理/brave-fighters_kira_</code> にあるキャラクター情報を、このゲームに組み込めるか」。調べると、kira さんのゲーム(PixiJS、画面 320×240、立ち姿 96)には「タカハシ」(<code>assets/characters/office-fighter</code>)と「ケンタロウ」(<code>hero-fighter</code>)の2キャラがいる。各キャラ 26 ポーズの透過PNG(1ポーズ1枚、歩きは2枚)と、固有技4種(飛び道具・上昇技・スライドか中段キック・6段の超必殺)、共通の能力値(HP100、速さ2、ジャンプ-6、重力0.3)がある。ケンタロウは ISHII のこと(依頼で確認)。</li>
+<li>取り込み方: こちらには画像のスプライトシート(<code>style: 'sheet'</code>、<code>assets/README.md</code>)の仕組みが既にあるので、絵はシートに変換して使う。キャラは、既にいる TAKAHASHI と ISHII を残して、別キャラとして足した(<code>takahashi_k</code> = TAKAHASHI K、<code>ishii_k</code> = ISHII K。どちらもタグ BRAVE)。固有技は、近いこちらの技で代用した。</li>
+<li>絵の変換: <code>tools/import_brave_fighters.py <kira さんの assets/characters フォルダ></code>。kira さんの切り出し定義(タカハシは <code>js/character-sprites.js</code> の frames、ケンタロウは <code>hero-fighter/frames.json</code>)のとおりに、原本のシート(2172×724 など)から 27 ポーズを切り出し、立ち姿を高さ 192 に縮める(kira さんのゲームの描画と同じ大きさ。ゲームの立ち姿 48 単位 = 絵の192ドット)。原本のうすいにじみは alpha 128 を境に消す。<code>assets/takahashi_k_sheet.png</code> と <code>assets/ishii_k_sheet.png</code>(どちらも 2496×1280、1コマ 416×256、足元 (208,224))と、切り出し定義 <code>.data.js</code>(artScale 4)ができる。</li>
+<li>ポーズの対応: こちらの33種のポーズを、kira さんのポーズで埋めた。弱パンチ・弱キック・強パンチ・強キックは、立ち・しゃがみ・空中の12種を、そのまま対応させた。技の3コマ(発生前・攻撃中・硬直)は、待機(しゃがみ技はしゃがみ)・攻撃ポーズ・攻撃ポーズ。必殺技と投げは、近い攻撃ポーズで代用。「定時スライド」の代用(tackle)は、しゃがみ強キックの姿。ケンタロウの「ブレイブキック」の代用(flyKick)は、立ちのキックの姿。歩きは2コマ、待機は1コマで、こちらの自動生成のキャラより動きは硬い。勝利・敗北の5ポーズ(relax、victoryTie など)もシートに入れたが、まだ使っていない。</li>
+<li>登録: <code>index.html</code> に script、<code>js/data/palettes.js</code> に見た目 <code>takahashi_k</code> と <code>ishii_k</code>(絵が読み込めないときは、写真から作った takahashi_v・ishii_v の絵で補う)、<code>js/config/characters.config.js</code> にキャラ(<code>order</code> の最後に takahashi_k、ishii_k)。TAKAHASHI K はステージ tokyo、ISHII K はステージ scramble。1P・2Pで同じ絵を使う。</li>
+<li>固有技(kira さんの技 → こちらの代用): TAKAHASHI K = 名刺ショット(↓↘→+P)→ fireball、出世アッパー(→↓↘+P)→ uppercut、定時スライド(下段の滑り込み)→ tackle(←ため→+P)、最終決裁(超必殺)→ superfireball(演出の名前は FINAL APPROVAL)。ISHII K = ヒーローショット → fireball、ライジングフィスト → uppercut、ブレイブキック(中段の蹴り)→ flyKick(→↓↘+K)、ブレイブインパクト(超必殺)→ superfireball(演出の名前は BRAVE IMPACT)。技の数値はこちらの技ライブラリのまま。</li>
+<li>絵の仕組みの追加(ほかのシートの見た目には影響しない): シートの切り出し定義に <code>face</code>(足元から右、足元から上、大きさ。絵のドット)を書けるようにした。<code>js/data/sprites.js</code> の <code>paintSheet</code> が絵に載せ、<code>js/render/portrait.js</code> の顔アイコンと大きな立ち絵が使う(それまでの顔の位置は、128ドットの大きさの絵を決め打ちしていた)。変換ツールが、待機ポーズの頭の位置から自動で決める。</li>
+<li>ケンタロウの絵は、既存の作品(ワンパンマン)のキャラクターに似ている。最初は取り込まなかったが、「対外的に利用するものではない」との確認があったので、そのまま取り込んだ。社内用のみ。ゲームを外に出す(公開・配布)ときは、ISHII K を別の絵に差し替えるか、一覧から外す(<code>order</code> から消すだけで外せる)。</li>
+<li>確認: 全見た目・全コマ・2パレットの生成(3492枚)でエラーなし、全キャラ(12人)のスモークテストでエラーなし。選択画面(顔アイコン・大きな立ち絵・名前)、対戦画面、4つの固有技(飛び道具、アッパー、滑り込み・蹴り、超必殺の演出)の表示を確認した。</li>
+</ul>
+<h3 id="11b46-bgm-2026-11-26">11b.46 BGM と効果音の追加(試作)(2026-11-26)</h3>
+<ul>
+<li>依頼: 「各種BGM、SEを用意したいのだが作れるか」。効果音は 11.3 で17種を作ってあったが、BGMはなかった。確認の結果は、進め方 = まず試作を聴く、BGM の範囲 = タイトル・キャラ選択 / バトル曲(全ステージ共通)/ ステージごとの専用曲 / 勝利・ゲームオーバーの短い曲、雰囲気 = アーケード格ゲー風、効果音 = 足りない音だけ追加。今回は、その最初の「試作」(バトル曲1曲と、追加の効果音9種)まで。画面への組み込みと、残りの曲は、試作を聴いてもらってから。</li>
+<li>方式: 音声ファイルは使わず、楽譜のデータ(<code>js/config/music.config.js</code>)を、<code>js/core/music.js</code> が Web Audio で演奏する。効果音(11.3)と同じく <code>file://</code> のダブルクリックで動き、曲の調整は設定ファイルの書き換えだけでできる。作れるのは、リード・コードの刻み・ベース・アルペジオ・ドラムでできた、アーケードやファミコン風の曲。生楽器の録音、歌入り、本格的なオーケストラは作れない(そういう曲が欲しいときは、別に作った音声ファイルを渡してもらい、組み込む)。</li>
+<li>楽譜の書き方(<code>music.config.js</code> の先頭にも説明がある): 1小節 = 16ステップ(16分音符16個)。メロディは、小節ごとの文字列 <code>'A4:2 C5:2 E5:4 r:8'</code>(音名:長さ。r は休符。合計が16になること。合わないと、曲を最初に流すときにエラーで知らせる)。ベース・コードの刻み・アルペジオ・ドラムは、<code>patterns</code> に16文字の型を名前を付けて置き、小節ごとのコード(<code>chords</code>)から音を決める。曲(<code>songs</code>)は、区間(<code>sections</code>)を順に演奏し、<code>loop: true</code> の区間から最後まで繰り返す。メロディは複数の声部を重ねられ、<code>transpose</code>(半音の上げ下げ)や <code>vol</code> も付けられる。音色は <code>instruments</code>、パートごとの音量は <code>mix</code>。</li>
+<li>演奏のしくみ(<code>js/core/music.js</code>): 楽譜を小節ごとの音の一覧にしてから、0.5秒先までの小節を、40ミリ秒ごとに予約していく。音色は、矩形波(デューティ比を変えられる)・のこぎり波・三角波とローパスで作り、ドラムはノイズと音程の下がる正弦波で作る。全体にコンプレッサーと、テンポに合わせたエコーをかける。曲ごとの出口(<code>bus</code>)でフェードする。使い方は、<code>Game.Core.Music.play('battle1')</code>(同じ曲が流れていれば何もしない)、<code>stop(秒)</code>、<code>jingle('名前', 終わったとき)</code>(1回だけ流す短い曲)、<code>duck(0〜1)</code>(ポーズ中の音量下げ)。音を出せる状態になる前に <code>play</code> しても、出せるようになったら流れる。</li>
+<li>音量と消音: BGM は、<code>music.config.js</code> の <code>volume</code>(BGM の出口)と <code>level</code>(曲全体の大きさ)で決まり、効果音の <code>master</code>(<code>sound.config.js</code>)も通る。M キーの消音は、効果音の master を 0 にするので、BGM も消える(<code>sound.js</code> の変更)。</li>
+<li>試作曲「STREET FIGHT」(<code>battle1</code>): イ短調、BPM156、36小節(約55秒)。イントロ 4 → A 8(主題)→ B 8(サビ)→ A 8(声部を足す)→ C 8(ブリッジ。ドラムは半拍、最後にスネアのロール)。A から最後までを繰り返す。ドラムのクラッシュは各区間の頭。</li>
+<li>追加した効果音(<code>js/core/sound.js</code> に定義、音量は <code>sound.config.js</code>): <code>jump</code> <code>land</code> <code>dash</code> <code>swingHeavy</code>(強い技の素振り)<code>throw</code> <code>down</code>(ダウン)<code>getup</code>(起き上がり)<code>dizzy</code>(気絶)<code>tick</code>(残り時間の警告)の9種。まだ、ゲームの画面からは鳴らしていない(鳴らす場所は、<code>fighter.js</code> の状態の切り替わりと <code>battle.js</code>)。</li>
+<li>試聴・書き出し: <code>tools/sound_test.html</code>(音のテスト室)をダブルクリックで開くと、全 BGM と全効果音をボタンで聴け、BGM と効果音の音量を動かせる(Esc で BGM を止める)。曲は OfflineAudioContext でも演奏できる(<code>Music.scheduleSong</code>)ので、書き出して音量や音の高さを測れる。効果音の書き出しは <code>Sound.renderTo</code>(<code>sound.js</code>)。</li>
+<li>確認: 音の高さが楽譜どおりであること(A4 → 441Hz、E5 → 661Hz、ベース A2 → 108Hz、F2 → 88Hz)、書き出した曲の最大 -3.3dB・平均 -16.6dB でクリップなし、帯域のバランス(最初は低音に偏っていたので、ベース・バスドラを下げ、メロディ・刻みを上げた)、実際のブラウザで再生・停止・消音(M キー)が動くこと。全見た目・全コマの生成(3492枚)と全キャラ(12人)のスモークテストはエラーなし。ただし、Claude は音を聴けないので、曲の良し悪し(旋律、音色、ノリ)は、聴いて判断してもらう必要がある。</li>
+<li>これから: 試作の感想に合わせて曲を直し、タイトル・キャラ選択・各ステージ・勝利・敗北の曲を作る。画面への組み込み(シーンに入ったら <code>play</code>、対戦開始の演出中・ポーズ中は <code>duck</code>、勝敗が決まったら <code>jingle</code>)と、追加した効果音を鳴らす場所の組み込みは、そのあと。</li>
+<li>整理(2026-11-26): 依頼は「不要なサンプルファイルがあれば削除して」。調べて、消す候補を示し、選ばれたものだけを消した。消したもの = 試作の mp3 2本(<code>Claude outputs</code>。同じ音は <code>tools/sound_test.html</code> で聴ける)、使っていない画像3枚(<code>assets/stage_seibu.png</code>、<code>assets/stage_seibu.jpg</code>、<code>assets/stage_ikebukuro_smoking.png</code>。どのコードからも読んでいなかった)、古いゲームの zip 5本(game.zip、game_arrow.zip、game_heavy.zip、game_heavy2.zip、game_save.zip)と画面写真 select3.png(<code>Claude outputs</code>)。残したもの = <code>Claude outputs</code> のバックアップのフォルダ(<code>backup_*</code>、<code>before_*</code>)すべて。</li>
 </ul>
 </main>
 <script>

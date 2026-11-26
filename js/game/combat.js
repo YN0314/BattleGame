@@ -15,10 +15,12 @@
     return cur;
   }
 
+  // 箱は足元が原点。キャラの大きさの倍率(char.scale)で、足元を中心に拡大・縮小する
   function attackRect(f) {
-    const hb = currentBox(f);
-    const x = f.facing > 0 ? f.x + hb.x : f.x - hb.x - hb.w;
-    return { x: x, y: f.y + hb.y, w: hb.w, h: hb.h };
+    const hb = currentBox(f), s = f.char.scale || 1;
+    const bx = hb.x * s, bw = hb.w * s;
+    const x = f.facing > 0 ? f.x + bx : f.x - bx - bw;
+    return { x: x, y: f.y + hb.y * s, w: bw, h: hb.h * s };
   }
 
   // 喰らい判定の箱
@@ -32,10 +34,11 @@
     const cfg = Game.Config.combat;
     if (!cfg || !cfg.frameHurtboxes) return [hurtRect(f)];
     const ps = f.pose();
+    const s = f.char.scale || 1;
     const ov = Game.Data.Sprites.hurtBoxes(f.char.sprite, ps.name, ps.frame);
     if (ov) {                                  // 画像の見た目でコマごとの箱が定義されていれば、それを使う
       return ov.map(function (b) {
-        return { x: f.facing > 0 ? f.x + b[0] : f.x - b[2], y: f.y + b[1], w: b[2] - b[0], h: b[3] - b[1] };
+        return { x: f.facing > 0 ? f.x + b[0] * s : f.x - b[2] * s, y: f.y + b[1] * s, w: (b[2] - b[0]) * s, h: (b[3] - b[1]) * s };
       });
     }
     const j = Game.Data.Sprites.joints(ps.name, ps.frame);
@@ -44,6 +47,7 @@
     const out = [];
     // 関節空間(右向き)の箱を、向きに合わせてワールド座標へ
     const box = function (x0, y0, x1, y1) {
+      x0 *= s; y0 *= s; x1 *= s; y1 *= s;      // 絵と同じ倍率で足元を中心に拡大・縮小
       out.push({ x: f.facing > 0 ? f.x + x0 : f.x - x1, y: f.y + y0, w: x1 - x0, h: y1 - y0 });
     };
     const span = function (a, b, pad) {

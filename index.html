@@ -16,10 +16,12 @@
       <tr><th></th><th>1P</th><th>2P</th></tr>
       <tr><td>移動</td><td>W A S D</td><td>← ↑ ↓ →</td></tr>
       <tr><td>ポーズ(技の確認)</td><td colspan="2">対戦中に Enter でポーズ。技の一覧とコマンド、選んだ技の動きと数値(威力・発生・持続・硬直)が見られる。↑↓で技、←→で1P/2P切り替え、もう一度 Enter で再開</td></tr>
-      <tr><td>トレーニング</td><td colspan="2">タイトルで TRAINING を選ぶ。左上に技の一覧とコマンド(テンキー表記:6=前 4=後ろ 2=下 8=上)。数字キー 1〜9,0 でその技を自動実演。Enter で選択画面へ戻る。体力・ゲージは減らない</td></tr>
+      <tr><td>トレーニング</td><td colspan="2">タイトルで TRAINING を選ぶ。左上に技の一覧とコマンド(やじるし表記。右向きのときの向き。P=パンチ K=キック)。数字キー 1〜9,0 でその技を自動実演。Enter で選択画面へ戻る。体力・ゲージは減らない</td></tr>
       <tr><td>ダッシュ / バックステップ</td><td colspan="2">前を素早く2回押す(2回目は押しっぱなし)でダッシュ。押し続けるかぎり走り続け、離すと止まる。後ろを素早く2回押すとバックステップ(少し浮いて下がる。動き出したら止まれない)。ダッシュ中もパンチ・キック・ジャンプ・投げに移れる</td></tr>
-      <tr><td>パンチ / キック</td><td>F / G</td><td>K / L</td></tr>
-      <tr><td>技の出し方</td><td colspan="2">立ち・しゃがみ(↓を押しながら)・ジャンプ中のそれぞれでパンチ/キックが出ます。ジャンプ中は1回のジャンプで1回だけ</td></tr>
+      <tr><td>弱パンチ / 弱キック</td><td>F / G</td><td>K / L</td></tr>
+      <tr><td>強パンチ / 強キック</td><td>R / T</td><td>I / O</td></tr>
+      <tr><td>強と弱</td><td colspan="2">強攻撃は弱攻撃より、リーチが長く、威力が高い。そのかわり振りが大きく(出るのが遅く、あとの隙が長い)、強キックと しゃがみ強キックは当たると相手をダウンさせる。必殺技・投げは、弱・強どちらのボタンでも出る。コントローラーは X=弱パンチ Y=強パンチ A=弱キック B=強キック(□ △ × ○)</td></tr>
+      <tr><td>技の出し方</td><td colspan="2">立ち・しゃがみ(↓を押しながら)・ジャンプ中のそれぞれで、弱・強のパンチ/キックが出ます。ジャンプ中は1回のジャンプで1回だけ</td></tr>
       <tr><td>必殺技</td><td colspan="2">波動拳:↓↘→ のあとパンチ(↓→でも可・飛び道具は1発まで) / 昇竜拳:→↓↘ のあとパンチ(出始め無敵・外すと大きな隙)。方向は相手の方を向いた向きで読みます。画面下の「直近の入力」でコマンドの入り具合を確認できます</td></tr>
       <tr><td>ため技</td><td colspan="2">ソニックブーム風:後ろを36フレーム(約0.6秒)押し続け → 前+パンチ(速い飛び道具) / サマーソルト風:下を約0.6秒押し続け → 上+キック(後ろへ跳びながら蹴り上げ。ダウンを奪う)。ため中は押し続けるだけでOK</td></tr>
       <tr><td>超必殺技</td><td colspan="2">スターブラスト:↓↘→↓↘→(↓→↓→でも可)のあとパンチ。必殺技ゲージを100消費(画面下の青いゲージ、1本=100)。出始め無敵・大きな飛び道具・ダメージ34・ガードされても削る。ゲージは攻撃を当てる/ガードされる/受けるとたまる(ラウンドをまたいで持ち越し)</td></tr>
@@ -46,16 +48,23 @@
 <script src="js/config/input.config.js"></script>
 <script src="js/config/ai.config.js"></script>
 <script src="js/config/sound.config.js"></script>
+<script src="js/config/music.config.js"></script>
 
 <script src="js/data/palettes.js"></script>
 <script src="js/data/sprites.js"></script>
+<script src="js/data/vec.js"></script>
 <script src="assets/hero_sheet.data.js"></script>
+<script src="assets/takahashi_k_sheet.data.js"></script>
+<script src="assets/ishii_k_sheet.data.js"></script>
+<script src="assets/face_takahashi.data.js"></script>
+<script src="assets/parts_takahashi.data.js"></script>
 
 <script src="js/core/inputHistory.js"></script>
 <script src="js/core/input.js"></script>
 <script src="js/core/loop.js"></script>
 <script src="js/core/debug.js"></script>
 <script src="js/core/sound.js"></script>
+<script src="js/core/music.js"></script>
 <script src="js/core/sceneManager.js"></script>
 
 <script src="js/game/character.js"></script>
@@ -72,6 +81,8 @@
 <script src="js/render/stageTokyo.js"></script>
 <script src="js/render/stageKaraoke.js"></script>
 <script src="js/render/stageScramble.js"></script>
+<script src="js/render/stageSmoking.js"></script>
+<script src="js/render/stageSeibu.js"></script>
 <script src="js/render/ui.js"></script>
 <script src="js/render/renderer.js"></script>
 <script src="js/render/portrait.js"></script>

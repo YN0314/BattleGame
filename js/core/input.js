@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  const ACTIONS = ['up', 'down', 'left', 'right', 'punch', 'kick', 'start'];
+  const ACTIONS = ['up', 'down', 'left', 'right', 'punch', 'kick', 'hpunch', 'hkick', 'start'];
   const heldKeys = new Set();
   const players = [0, 1].map(function () { return { held: blank(), pressed: blank() }; });
   let padIds = [];
@@ -49,7 +49,9 @@
     if (btn(g.dpad.left) || ax[0] < -g.deadzone) out.left = true;
     if (btn(g.dpad.right) || ax[0] > g.deadzone) out.right = true;
     if (g.punch.some(function (i) { return btn(i); })) out.punch = true;
+    if ((g.hpunch || []).some(function (i) { return btn(i); })) out.hpunch = true;
     if (g.kick.some(function (i) { return btn(i); })) out.kick = true;
+    if ((g.hkick || []).some(function (i) { return btn(i); })) out.hkick = true;
     if (g.start.some(function (i) { return btn(i); })) out.start = true;
   }
 
@@ -61,10 +63,15 @@
       const cur = blank();
       readKeyboard(i, cur);
       if (pads[i]) readPad(pads[i], cur);
+      // 強攻撃のボタンは「弱のボタンも押している」扱いにも数える(必殺技・投げ・連打の判定はそのまま使える)
+      if (cur.hpunch) cur.punch = true;
+      if (cur.hkick) cur.kick = true;
       ACTIONS.forEach(function (a) {
         pl.pressed[a] = cur[a] && !pl.held[a];           // 押した瞬間
         pl.held[a] = cur[a];                              // 押している間
       });
+      if (pl.pressed.hpunch) pl.pressed.punch = true;     // 弱を押したままでも、強を押した瞬間は「押した」
+      if (pl.pressed.hkick) pl.pressed.kick = true;
       Game.Core.InputHistory.push(i, pl.held);            // コマンド判定のために履歴へ記録
     });
   }

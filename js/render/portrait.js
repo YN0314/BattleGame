@@ -15,6 +15,19 @@
   function draw(ctx, id, palette, x, y, w, h, frac, flip) {
     const img = sprite(id, palette);
     if (!img) return;
+    if (img.face) {                                         // 顔の位置があるシート絵:頭から腰までを切り出して、箱いっぱいに描く
+      const ox = img.originX, oy = img.originY, fs = img.face[2];
+      const sw = fs * 3.0, shh = fs * 2.6;
+      const sx = ox + img.face[0] + fs * 0.45 - sw / 2, sy = oy - img.face[1] - fs * 0.6;
+      const k2 = Math.min(w / sw, h / shh), dw2 = sw * k2, dh2 = shh * k2;
+      const dx2 = x + (w - dw2) / 2, dy2 = y + h - dh2;
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      if (flip) { ctx.translate(dx2 + dw2 / 2, 0); ctx.scale(-1, 1); ctx.translate(-(dx2 + dw2 / 2), 0); }
+      ctx.drawImage(img, sx, sy, sw, shh, dx2, dy2, dw2, dh2);
+      ctx.restore();
+      return;
+    }
     const sh = Math.max(1, Math.round(img.height * frac));
     const k = Math.min(w / img.width, h / sh);            // 画像1ドットを何単位で描くか
     const dw = img.width * k, dh = sh * k;
@@ -30,9 +43,15 @@
   function sheetFace(ctx, img, x, y, w, h) {
     const S = Game.Data.Sprites;
     const ox = img.originX !== undefined ? img.originX : img.width / 2, oy = img.originY !== undefined ? img.originY : img.height;
-    const u = img.height / 128;                                   // 1ドット(シートの素の大きさ128基準)
-    const cw = 44 * u * (w / h > 1 ? w / h : 1), chh = 44 * u * (w / h < 1 ? h / w : 1);
-    const sx = ox + 2 * u - cw / 2, sy = oy - 86 * u - chh / 2;   // 頭の中心は足元から約86ドット上
+    let u, cw, chh, sx, sy;
+    if (img.face) {                                               // シートに顔の位置があれば、その位置を中心に切り出す
+      cw = img.face[2] * (w / h > 1 ? w / h : 1); chh = img.face[2] * (w / h < 1 ? h / w : 1);
+      sx = ox + img.face[0] - cw / 2; sy = oy - img.face[1] - chh / 2;
+    } else {
+      u = img.height / 128;                                       // 1ドット(シートの素の大きさ128基準)
+      cw = 44 * u * (w / h > 1 ? w / h : 1); chh = 44 * u * (w / h < 1 ? h / w : 1);
+      sx = ox + 2 * u - cw / 2; sy = oy - 86 * u - chh / 2;       // 頭の中心は足元から約86ドット上
+    }
     ctx.save();
     ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     ctx.imageSmoothingEnabled = false;

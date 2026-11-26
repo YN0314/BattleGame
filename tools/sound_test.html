@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音のテスト室</title>
+<style>
+  :root { --bg: #14161c; --fg: #e8e8ee; --mute: #9aa0b0; --card: #1f222b; --line: #333847; --accent: #ffb020; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg); font: 15px/1.6 system-ui, "Hiragino Sans", "Yu Gothic", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 10px; color: var(--accent); }
+  p.note { color: var(--mute); margin: 0 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { background: var(--card); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
+  .song { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+  .song b { flex: 1; }
+  .song small { color: var(--mute); }
+  label { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  input[type=range] { flex: 1; max-width: 320px; }
+  #now { color: var(--mute); min-height: 1.6em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>音のテスト室</h1>
+  <p class="note">ゲームの BGM と効果音を、ここで聴けます(このファイルをダブルクリックで開く)。ボタンを押すと音が出ます。</p>
+
+  <h2>音量</h2>
+  <label>BGM <input id="vBgm" type="range" min="0" max="100" value="90"> <span id="vBgmN"></span></label>
+  <label>効果音 <input id="vSe" type="range" min="0" max="100" value="50"> <span id="vSeN"></span></label>
+
+  <h2>BGM</h2>
+  <div id="songs"></div>
+  <p id="now"></p>
+
+  <h2>効果音</h2>
+  <div class="row" id="ses"></div>
+</main>
+
+<script src="../js/namespace.js"></script>
+<script src="../js/config/sound.config.js"></script>
+<script src="../js/config/music.config.js"></script>
+<script src="../js/core/sound.js"></script>
+<script src="../js/core/music.js"></script>
+<script>
+(function () {
+  'use strict';
+  const S = Game.Core.Sound, M = Game.Core.Music, C = Game.Config;
+  const $ = function (id) { return document.getElementById(id); };
+  let playing = null;
+
+  // 曲の長さ(秒)
+  function lengthOf(name) {
+    const s = M.compile(name);
+    return Math.round(s.bars.length * s.steps * s.stepSec);
+  }
+
+  function renderSongs() {
+    $('songs').innerHTML = '';
+    Object.keys(C.music.songs).forEach(function (key) {
+      const d = C.music.songs[key], once = d.once;
+      const row = document.createElement('div'); row.className = 'song';
+      row.innerHTML = '<b>' + (d.name || key) + ' <small>(' + key + ' / BPM ' + d.bpm + ' / ' + lengthOf(key) + '秒' + (once ? ' / 1回だけ' : '') + ')</small></b>';
+      const b = document.createElement('button'); b.textContent = '再生';
+      b.onclick = function () {
+        S.unlock();
+        if (playing === key) { M.stop(0.3); playing = null; } else { if (once) M.jingle(key); else M.play(key); playing = once ? null : key; }
+        refresh();
+      };
+      row.appendChild(b); row._b = b; row._key = key; $('songs').appendChild(row);
+    });
+  }
+  function refresh() {
+    Array.prototype.forEach.call($('songs').children, function (r) {
+      const on = r._key === playing;
+      r._b.textContent = on ? '停止' : '再生'; r._b.className = on ? 'on' : '';
+    });
+    $('now').textContent = playing ? '再生中: ' + playing + '(最後まで行くと、ループの頭に戻ります)' : '';
+  }
+
+  function renderSes() {
+    S.names().forEach(function (n) {
+      const b = document.createElement('button'); b.textContent = n;
+      b.onclick = function () { S.unlock(); S.play(n); };
+      $('ses').appendChild(b);
+    });
+  }
+
+  function vol() {
+    C.music.volume = $('vBgm').value / 100; $('vBgmN').textContent = $('vBgm').value;
+    C.sound.master = $('vSe').value / 100; $('vSeN').textContent = $('vSe').value;
+    if (S.musicOut()) S.musicOut().gain.value = C.music.volume;
+  }
+  $('vBgm').oninput = vol; $('vSe').oninput = vol;
+  window.addEventListener('keydown', function (e) { if (e.code === 'Escape') { M.stop(0.2); playing = null; refresh(); } });
+
+  S.init(); renderSongs(); renderSes(); vol(); refresh();
+})();
+</script>
+</body>
+</html>

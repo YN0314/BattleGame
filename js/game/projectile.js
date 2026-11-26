@@ -14,8 +14,9 @@
       this.owner = owner;
       this.def = def;                        // moves.config の projectile 項目
       this.dir = owner.facing;
-      this.x = owner.x + this.dir * def.offsetX;
-      this.y = owner.y + def.offsetY;
+      const s = owner.char.scale || 1;       // 手元から出るので、出る位置は持ち主の大きさに合わせる(飛び道具そのものの大きさ・速さは変えない)
+      this.x = owner.x + this.dir * def.offsetX * s;
+      this.y = owner.y + def.offsetY * s;
       this.vx = this.dir * def.speed;
       this.age = 0;
       this.dead = false;

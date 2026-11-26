@@ -172,22 +172,45 @@
     });
   }
 
-  // コマンドの表記:テンキー配置(6=前 4=後ろ 2=下 8=上 3=前下)
-  function commandText(m) {
+  // コマンドの表記:やじるしの絵(右向きのキャラから見た向き)と文字の並び
+  const ANGLE = { 6: 0, 3: 45, 2: 90, 1: 135, 4: 180, 7: 225, 8: 270, 9: 315 };
+  function commandTokens(m) {
     const C = Game.Config.input.commands, btn = (m.button === 'kick') ? 'K' : 'P';
-    if (m.throw && !m.command) return 'P + K';
+    if (m.throw && !m.command) return ['P', '+', 'K'];
     const c = C[m.command];
-    if (!c) return '';
-    if (c.type === 'charge') return 'HOLD ' + c.hold[0] + ' > ' + c.release[0] + ' + ' + btn;
-    const seq = c.motions[0].map(function (st) { return st[0]; }).join('');
-    return seq + ' + ' + btn;
+    if (!c) return [];
+    if (c.type === 'charge') return ['HOLD', c.hold[0], '>', c.release[0], '+', btn];
+    return c.motions[0].map(function (st) { return st[0]; }).concat(['+', btn]);
+  }
+  function arrowIcon(ctx, cx, cy, dir, color) {
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(ANGLE[dir] * Math.PI / 180);
+    ctx.fillStyle = '#05050a';                                   // ふち
+    ctx.fillRect(-4.5, -1.7, 6, 3.4);
+    ctx.beginPath(); ctx.moveTo(0.5, -4.2); ctx.lineTo(5, 0); ctx.lineTo(0.5, 4.2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillRect(-4, -0.9, 5.2, 1.8);
+    ctx.beginPath(); ctx.moveTo(1, -3.2); ctx.lineTo(4, 0); ctx.lineTo(1, 3.2); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  // 右端そろえでコマンドを描く(やじるしは絵、そのほかは文字)
+  function drawCommand(ctx, m, rightX, y, color) {
+    const Font = Game.Render.Font, toks = commandTokens(m), AW = 10, GAP = 2;
+    const wOf = function (t) { return typeof t === 'number' ? AW : Font.measure(String(t), 1); };
+    let total = 0; toks.forEach(function (t) { total += wOf(t) + GAP; }); total -= GAP;
+    let x = rightX - total;
+    toks.forEach(function (t) {
+      if (typeof t === 'number') arrowIcon(ctx, x + AW / 2, y + 2.5, t, color);
+      else Font.draw(ctx, String(t), x, y, 1, color, 'left', null);
+      x += wOf(t) + GAP;
+    });
   }
 
   // 技の確認(トレーニング)の技リスト
   function drawTrain(ctx, scene) {
     const Font = Game.Render.Font, D = Game.Config.display;
     const list = scene.moveList();
-    const x = 4, y = 30, w = 138, rowH = 8, h = 20 + list.length * rowH + 16;
+    const x = 4, y = 30, w = 176, rowH = 9, h = 20 + list.length * rowH + 16;
     ctx.fillStyle = 'rgba(5,5,12,0.72)';
     ctx.fillRect(x, y, w, h);
     Font.draw(ctx, 'TRAINING', x + 4, y + 4, 1, '#ffe56a', 'left', null);
@@ -197,11 +220,11 @@
       if (on) { ctx.fillStyle = 'rgba(255,229,106,0.18)'; ctx.fillRect(x + 1, yy - 1, w - 2, rowH); }
       Font.draw(ctx, String((i + 1) % 10), x + 4, yy, 1, '#ffe56a', 'left', null);
       Font.draw(ctx, it.move.label || it.name.toUpperCase(), x + 12, yy, 1, on ? '#ffffff' : '#c8d0f0', 'left', null);
-      Font.draw(ctx, commandText(it.move), x + w - 4, yy, 1, on ? '#ffffff' : '#8fa0d8', 'right', null);
+      drawCommand(ctx, it.move, x + w - 4, yy, on ? '#ffffff' : '#8fa0d8');
     });
     const by = y + 16 + list.length * rowH + 2;
     Font.draw(ctx, 'NUMBER KEY: DEMO   ENTER: BACK', x + 4, by, 1, '#7a86b8', 'left', null);
-    Font.draw(ctx, '6 FWD  4 BACK  2 DOWN  8 UP', x + 4, by + 7, 1, '#7a86b8', 'left', null);
+    Font.draw(ctx, 'ARROWS: FACING RIGHT   P PUNCH  K KICK', x + 4, by + 7, 1, '#7a86b8', 'left', null);
   }
 
   // ポーズ画面:技の一覧(コマンド付き)と、選んだ技の動きの再生
@@ -219,7 +242,7 @@
       const yy = y + i * rowH, on = it === sel;
       if (on) { ctx.fillStyle = 'rgba(255,229,106,0.25)'; ctx.fillRect(x + 1, yy - 2, w - 2, rowH); }
       Font.draw(ctx, it.move.label || it.name.toUpperCase(), x + 5, yy, 1, on ? '#ffffff' : '#a8b0d8', 'left', null);
-      Font.draw(ctx, commandText(it.move), x + w - 5, yy, 1, on ? '#ffe56a' : '#7f8ac0', 'right', null);
+      drawCommand(ctx, it.move, x + w - 5, yy, on ? '#ffe56a' : '#9aa6d8');
     });
     // 動きの再生(技の時間どおりに、終わったら少し止めて繰り返す)
     const ax = 290, ay = 150;
@@ -238,7 +261,7 @@
         frame = 1 + e * e * (3 - 2 * e);
       }
     }
-    const img = S.get(name, frame, fi.palette, fi.char.sprite), k = 1.5;
+    const img = S.get(name, frame, fi.palette, fi.char.sprite), k = 1.5 * (fi.char.scale || 1);
     const ox = img.originX !== undefined ? img.originX : S.originX, oy = img.originY !== undefined ? img.originY : S.originY;
     ctx.drawImage(img, ax - ox / RES * k, ay - oy / RES * k, img.width / RES * k, img.height / RES * k);
     // 数値

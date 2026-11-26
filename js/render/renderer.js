@@ -53,7 +53,8 @@
 
     // 影:高く跳ぶほど小さくなる
     const air = D.floorY - f.y;
-    const sw = Math.max(10, 24 - Math.floor(air / 6));
+    const cs = f.char.scale || 1;                                                                     // キャラの大きさの倍率(1=そのまま。当たり判定も同じ倍率)
+    const sw = Math.max(10, 24 - Math.floor(air / 6)) * cs;
     disc(Math.round(f.x * RES) / RES, D.floorY + 0.5, sw / 2, 1.6, 'rgba(0,0,0,0.35)');
 
     const pose = f.pose();
@@ -61,6 +62,7 @@
     ctx.save();
     ctx.translate(px, py);
     if (f.facing < 0) ctx.scale(-1, 1);     // 左向きは反転
+    if (cs !== 1) ctx.scale(cs, cs);          // 足元を中心に拡大・縮小
     const ox = img.originX !== undefined ? img.originX : S.originX;       // 画像の見た目は、コマごとに足元の位置が違う
     const oy = img.originY !== undefined ? img.originY : S.originY;
     ctx.drawImage(img, -ox / RES, -oy / RES, img.width / RES, img.height / RES);

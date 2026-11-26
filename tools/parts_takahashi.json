@@ -1,0 +1,14 @@
+{
+  "name": "takahashi",
+  "colors": 32,
+  "sources": { "a": "photo_src/tk10_cut.png", "b": "photo_src/tk11_cut.png" },
+  "parts": {
+    "head":   { "src": "a", "bbox": [694, 275, 874, 510], "size": [46, 60], "flip": true, "ellipse": true },
+    "torso":  { "src": "b", "bbox": [764, 594, 1019, 950], "size": [50, 60], "fix": [[799, 824, 909, 904]] },
+    "uarm":   { "src": "b", "bbox": [560, 610, 760, 720], "size": [28, 34], "rot": 1, "flip2": true },
+    "farm":   { "src": "b", "bbox": [380, 600, 570, 710], "size": [24, 34], "rot": 1, "flip2": true },
+    "thigh":  { "src": "a", "bbox": [690, 930, 910, 1180], "size": [38, 44], "flip": true },
+    "shin":   { "src": "a", "bbox": [700, 1180, 890, 1440], "size": [30, 44], "flip": true },
+    "shoe":   { "src": "a", "bbox": [639, 1455, 754, 1525], "size": [20, 34], "flip": true, "rot": 3 }
+  }
+}

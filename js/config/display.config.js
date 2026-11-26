@@ -5,6 +5,7 @@ Game.Config.display = {
   floorY: 192,             // 地面の高さ(キャラの足元のY座標)
 
   pixelScale: 4,           // 描画の細かさ(1=粗い、2=2倍、4=4倍)。キャラ・背景・文字・演出のすべてがこの細かさで描かれる。変更後はリロード
+  characterScale: 1,       // 全キャラの大きさの倍率(1=そのまま、0.9=1割小さく)。足元を中心に、絵も当たり判定(体の寸法・喰らい判定・技の判定・投げの距離)も同じ倍率で拡大・縮小する。キャラごとの倍率(characters.config.js の scale)と掛け合わさる。変更後はリロード
   maxScale: 2,             // 画面への拡大倍率の上限(キャンバスの1ドットを画面で何倍にするか。ウィンドウに合わせて自動で縮小される)
 
   debug: true,             // 画面下のデバッグ表示(H キーで当たり判定の箱を表示)
@@ -26,6 +27,8 @@ Game.Config.display = {
       karaoke: { builder: 'StageKaraoke', name: 'DOWNTOWN' },                     // 繁華街の交差点(カラオケ店のある街角の写真をもとにデフォルメして自動で描く)
       scramble: { builder: 'StageScramble', name: 'SCRAMBLE CROSSING' },                   // スクランブル交差点(渋谷の交差点の写真をもとにデフォルメして自動で描く)
       photo: { image: 'assets/stage_ikebukuro.png', parallax: 0.5, name: 'PHOTO' },   // 写真をそのままドット絵にしたもの(参考)
+      smoking: { builder: 'StageSmoking', name: 'SMOKING AREA' },                         // 喫煙所の囲い(photo/stages/ikebukuro_smoking.png の写真をもとにデフォルメして自動で描く)
+      seibu: { builder: 'StageSeibu', name: 'SEIBU FRONT' },                              // 西武側の通り(photo/stages/seibu_front.png の写真をもとにデフォルメして自動で描く)
       night: { name: 'NIGHT CITY' }      // 画像なし = 自動生成の夜の街
     }
   },

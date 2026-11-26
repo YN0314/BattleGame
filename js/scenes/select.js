@@ -6,8 +6,8 @@
 (function () {
   'use strict';
 
-  const COLS = 4;
-  const CELL = { w: 30, h: 36, gx: 32, gy: 38, x0: 128, y0: 102 };
+  const COLS = 6;                                                  // 16人以上が3段に収まるよう、1段6人
+  const CELL = { w: 22, h: 30, gx: 24, gy: 33, x0: 121, y0: 102 };
   const COLORS = ['#ff4a3a', '#4a8aff'];
 
   const Select = {
@@ -77,7 +77,10 @@
           if (pr.left) { self.cursor[p] = (self.cursor[p] + n - 1) % n; moved = true; }
           if (pr.right) { self.cursor[p] = (self.cursor[p] + 1) % n; moved = true; }
           if (pr.up && self.cursor[p] - COLS >= 0) { self.cursor[p] -= COLS; moved = true; }
-          if (pr.down && self.cursor[p] + COLS < n) { self.cursor[p] += COLS; moved = true; }
+          if (pr.down) {
+            if (self.cursor[p] + COLS < n) { self.cursor[p] += COLS; moved = true; }
+            else if (Math.floor(self.cursor[p] / COLS) < Math.floor((n - 1) / COLS)) { self.cursor[p] = n - 1; moved = true; }     // 最下段が短いとき、いちばん右のキャラへ
+          }
           if (moved) { Snd.play('move'); self.focus = p; }
           if (pr.punch || pr.start) {
             self.locked[p] = true; self.focus = p; Snd.play('ok'); Game.Core.Sound.unlock();
@@ -156,7 +159,8 @@
       });
 
       // 顔のアイコンのグリッド
-      for (let k = 0; k < 8; k++) {
+      const slots = Math.max(COLS * 3, Math.ceil(ids.length / COLS) * COLS);
+      for (let k = 0; k < slots; k++) {
         const col = k % COLS, row = Math.floor(k / COLS);
         const x = CELL.x0 + col * CELL.gx, y = CELL.y0 + row * CELL.gy;
         ctx.fillStyle = '#05060f'; ctx.fillRect(x - 1, y - 1, CELL.w + 2, CELL.h + 2);

@@ -8,6 +8,7 @@ Game.Config.sound = {
   master: 0.5,
   volumes: {
     swing: 0.5, hitLight: 1.0, hitHeavy: 1.0, guard: 0.8, fireball: 0.8, uppercut: 0.8,
-    ko: 1.0, charge: 0.6, ready: 0.8, super: 0.9, move: 0.5, ok: 0.7, back: 0.5, round: 0.8, fight: 0.9, timeup: 0.8, win: 0.8
+    ko: 1.0, charge: 0.6, ready: 0.8, super: 0.9, move: 0.5, ok: 0.7, back: 0.5, round: 0.8, fight: 0.9, timeup: 0.8, win: 0.8,
+    jump: 0.8, land: 0.7, dash: 0.9, swingHeavy: 0.7, throw: 0.8, down: 0.9, getup: 0.7, dizzy: 0.8, tick: 0.6
   }
 };

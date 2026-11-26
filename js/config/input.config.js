@@ -3,18 +3,20 @@ Game.Config.input = {
   keyboard: [
     // 1P
     { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
-      punch: ['KeyF'], kick: ['KeyG'], start: ['Enter'] },
+      punch: ['KeyF'], kick: ['KeyG'], hpunch: ['KeyR'], hkick: ['KeyT'], start: ['Enter'] },
     // 2P
     { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
-      punch: ['KeyK'], kick: ['KeyL'], start: [] }
+      punch: ['KeyK'], kick: ['KeyL'], hpunch: ['KeyI'], hkick: ['KeyO'], start: [] }
   ],
 
   // コントローラー(標準配置の機種を基準にしたボタン番号)
   gamepad: {
     deadzone: 0.5,                              // スティックをデジタル入力とみなすしきい値
     dpad: { up: 12, down: 13, left: 14, right: 15 },
-    punch: [2, 3],                              // Xbox: X, Y / PlayStation: □, △
-    kick: [0, 1],                               // Xbox: A, B / PlayStation: ×, ○
+    punch: [2],                                 // 弱パンチ  Xbox: X / PlayStation: □
+    hpunch: [3],                                // 強パンチ  Xbox: Y / PlayStation: △
+    kick: [0],                                  // 弱キック  Xbox: A / PlayStation: ×
+    hkick: [1],                                 // 強キック  Xbox: B / PlayStation: ○
     start: [9]
   },
 
