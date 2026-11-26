@@ -30,6 +30,8 @@
     matchWinner: -1,    // 試合の勝者(result中のみ有効)
     menuItems: ['REMATCH', 'CHARACTER SELECT', 'TITLE'],
     menuIndex: 0,
+    loading: false,     // 絵の準備待ち
+    spritePairs: [],    // この試合で使う [見た目, 色] の組
 
     // 試合の開始(タイトルなどから呼ばれる)
     enter: function (params) {
@@ -45,6 +47,11 @@
       this.demoQueue = [];
       this.demoName = null;
       this.startRound();
+      // 2人ぶんの絵がそろうまで待つ(自動生成の絵は、使う前に描き起こす。VS 画面のあいだに進めているので、ふつうは待たない)
+      const SP = Game.Data.Sprites;
+      this.spritePairs = this.fighters.map(function (fi) { return [fi.char.sprite, fi.palette]; });
+      SP.prepare(this.spritePairs, { budget: 28 });
+      this.loading = !SP.isReady(this.spritePairs);
     },
 
     // 互換用:最初からやり直す
@@ -262,6 +269,10 @@
     },
 
     update: function () {
+      if (this.loading) {                                  // 絵の準備待ち。そろったら始める
+        if (!Game.Data.Sprites.isReady(this.spritePairs)) return;
+        this.loading = false;
+      }
       const In = Game.Core.Input;
       const R = Game.Config.game.round;
       const f = this.fighters;
@@ -355,7 +366,19 @@
       }
     },
 
+    // 絵の準備待ちの画面(NOW LOADING と進み具合)
+    drawLoading: function (ctx) {
+      const D = Game.Config.display, Font = Game.Render.Font;
+      const pr = Game.Data.Sprites.progress(this.spritePairs), r = pr.total ? pr.done / pr.total : 1;
+      const cx = D.width / 2, cy = D.height / 2;
+      ctx.fillStyle = '#05060f'; ctx.fillRect(0, 0, D.width, D.height);
+      Font.draw(ctx, 'NOW LOADING', cx, cy - 14, 2, '#ffffff', 'center', '#1c2a6a');
+      ctx.fillStyle = '#2a3158'; ctx.fillRect(cx - 60, cy + 4, 120, 6);
+      ctx.fillStyle = '#ffe56a'; ctx.fillRect(cx - 60, cy + 4, Math.round(120 * r), 6);
+    },
+
     render: function () {
+      if (this.loading) { Game.Render.Renderer.draw({ drawScreen: this.drawLoading.bind(this) }); return; }
       Game.Render.Renderer.draw(this);
       Game.Core.Debug.show(this);
     }

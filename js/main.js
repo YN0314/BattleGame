@@ -11,7 +11,7 @@
   // 画像(スプライトシート)の読み込みを待ってから始める。画像がなければすぐ始まる
   Promise.resolve(Game.Data.Sprites.preload()).then(function () {
     SM.go('title');
-    if (Game.Data.Sprites.warm) Game.Data.Sprites.warm();
+    Game.Data.Sprites.warmPortraits();                                   // 選択画面の顔だけ、先に少しずつ描いておく
     Game.Core.Loop.start(
       function () { SM.update(); },
       function () { SM.render(); }

@@ -114,11 +114,20 @@
     function toCanvas(ol) {
       const o = rgb.o;
       const thick = (ol && ol.thick) ? ol.thick : Math.max(1, Math.round(RES / 2));
-      for (let pass = 0; pass < thick; pass++) {
+      // 輪郭が付くのは、絵のある範囲の外側へ1ドットずつ。その範囲だけを調べる(画像全体を調べるより速い。結果は同じ)
+      let bx0 = W, by0 = H, bx1 = -1, by1 = -1;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          if (data[(y * W + x) * 4 + 3]) { if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y; }
+        }
+      }
+      for (let pass = 0; pass < thick && bx1 >= 0; pass++) {
         const src = new Uint8ClampedArray(data);
         const a = function (x, y) { return (x < 0 || y < 0 || x >= W || y >= H) ? 0 : src[(y * W + x) * 4 + 3]; };
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
+        const m = pass + 1;
+        const ys0 = Math.max(0, by0 - m), ys1 = Math.min(H - 1, by1 + m), xs0 = Math.max(0, bx0 - m), xs1 = Math.min(W - 1, bx1 + m);
+        for (let y = ys0; y <= ys1; y++) {
+          for (let x = xs0; x <= xs1; x++) {
             if (a(x, y) !== 0) continue;
             if (a(x - 1, y) || a(x + 1, y) || a(x, y - 1) || a(x, y + 1)) {
               const i = (y * W + x) * 4;
@@ -1112,6 +1121,30 @@
     return all.filter(function (lk) { return used[lk]; });
   }
 
+  // ---- 描き起こしの順番待ち ----
+  // 全キャラの全コマを起動時に描くと遅い(約1950コマ)ので、使うキャラのぶんだけ、使う前に少しずつ描く。
+  // 1回に使う時間は BASE_BUDGET(1フレームを邪魔しない長さ)。待っている画面があるときは prepare の budget で大きくする。
+  const BASE_BUDGET = 6;
+  const PRIO_POSES = ['idle', 'walk', 'jump', 'crouch', 'guard', 'crouchGuard', 'hit', 'standPunch', 'standKick', 'standHPunch', 'standHKick', 'crouchPunch', 'crouchKick'];
+  const qMain = [], qTween = [], prepared = {}, baseLeft = {}, tweenLeft = {};
+  let budget = BASE_BUDGET, pumping = false;
+
+  function poseOrder(names) {                       // よく使うポーズから先に
+    const first = PRIO_POSES.filter(function (n) { return names.indexOf(n) >= 0; });
+    return first.concat(names.filter(function (n) { return first.indexOf(n) < 0; }));
+  }
+  function schedule() { if (!pumping && (qMain.length || qTween.length)) { pumping = true; setTimeout(pump, 0); } }
+  function pump() {
+    pumping = false;
+    const S = Game.Data.Sprites, end = performance.now() + budget;
+    while (performance.now() < end && (qMain.length || qTween.length)) {
+      const main = qMain.length > 0, job = main ? qMain.shift() : qTween.shift();
+      S.get(job[0], job[1], job[2], job[3], true);
+      if (job[4]) { if (main) baseLeft[job[4]]--; else tweenLeft[job[4]]--; }
+    }
+    if (qMain.length || qTween.length) schedule(); else budget = BASE_BUDGET;
+  }
+
   // ---- 取り出し口 ----
   const cache = {};
   Game.Data.SpriteInternals = { createRaster: createRaster, RES: RES, W: W, H: H, OX: OX, OY: OY, ik: ik, drawFx: drawFx, ARM1: ARM1, ARM2: ARM2, LEG1: LEG1, LEG2: LEG2 };
@@ -1120,7 +1153,7 @@
     originY: OY,
     scale: RES,        // ゲーム内の1単位が画像の何マスか
     // name: ポーズ名, frame: 連番, palette: 0(1P) / 1(2P)
-    get: function (name, frame, palette, look) {
+    get: function (name, frame, palette, look, force) {      // force: 先読みの順番待ちから呼ぶとき(代用せずに、そのコマを描く)
       let lk = look || 'hero';
       let L = Game.Data.Looks[lk] || Game.Data.Looks.hero;
       if (L.style === 'sheet') {
@@ -1133,6 +1166,10 @@
       }
       const rp = resolvePose(name, frame);
       const key = lk + ':' + name + ':' + rp.a + '.' + rp.step + ':' + palette;
+      if (!force && !cache[key] && rp.step > 0 && tweenLeft[lk + ':' + palette] > 0) {
+        const kb = lk + ':' + name + ':' + rp.a + '.0:' + palette;   // 中間コマを先に描いている最中は、まだ無いコマのために手を止めない(整数のコマで代用)
+        if (cache[kb]) return cache[kb];
+      }
       if (!cache[key]) {
         const dl = DETAIL[name];
         const di = rp.t < 0.5 ? rp.a : Math.min(rp.a + 1, poses[name].length - 1);   // 中間コマは近いほうの描き分けを使う
@@ -1141,18 +1178,12 @@
       }
       return cache[key];
     },
-    // 全コマを先に描き起こしておく(初めて技を出した瞬間のカクつきを防ぐ)
+    // 起動時の準備:画像(スプライトシート)を読み込み、画像の見た目のコマを描く。自動生成の見た目は、ここでは描かない
+    // (全キャラの全コマを起動時に描くと、数十秒かかるため。使うキャラのぶんを prepare で、使う前に描く)
     // 戻り値:画像の読み込みが終わると解決する Promise(画像のない見た目だけなら、すぐ解決)
     preload: function () {
       const self = this;
       const L = self.list();
-      Object.keys(L).forEach(function (name) {
-        for (let f = 0; f < L[name]; f++) {
-          activeLooks(false).forEach(function (lk) {
-            for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) self.get(name, f, p, lk);
-          });
-        }
-      });
       return loadSheets().then(function () {
         activeLooks(true).forEach(function (lk) {
           Object.keys(L).forEach(function (name) {
@@ -1163,28 +1194,71 @@
         });
       });
     },
-    // 中間コマを、画面を止めないよう少しずつ先に作っておく(ゲーム開始後に呼ぶ。間に合わないコマは使うときに作られる)
-    warm: function () {
+    // 全部の見た目の全コマを、いますぐ描き起こす(確認用・書き出し用。ゲーム本体は使わない。数十秒かかる)
+    preloadAll: function () {
       const self = this;
       const L = self.list();
-      const Q = Math.max(1, (Game.Config.display.anim && Game.Config.display.anim.tweenSteps) || 1);
-      const jobs = [];
       Object.keys(L).forEach(function (name) {
         for (let f = 0; f < L[name]; f++) {
-          for (let s = 1; s < Q; s++) {
-            if (L[name] === 1) break;
-            activeLooks(false).forEach(function (lk) {
-              for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) jobs.push([name, f + s / Q, p, lk]);
-            });
-          }
+          activeLooks(false).forEach(function (lk) {
+            for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) self.get(name, f, p, lk);
+          });
         }
       });
-      let i = 0;
-      (function tick() {
-        const end = performance.now() + 6;                  // 1回に使う時間は約6ms(1フレームを邪魔しない)
-        while (i < jobs.length && performance.now() < end) { self.get.apply(self, jobs[i++]); }
-        if (i < jobs.length) setTimeout(tick, 0);
-      })();
+      return this.preload();
+    },
+    // 使うキャラ(見た目×色の組 [[見た目, 色], ...])の全コマを、順番待ちに入れて、少しずつ描き起こす。
+    //   整数のコマ(これで isReady になる)→ 中間コマの順。budget = 1回に使う時間(ms。待っている人がいるときは大きく)
+    prepare: function (pairs, opts) {
+      const self = this, L = self.list();
+      const Q = Math.max(1, (Game.Config.display.anim && Game.Config.display.anim.tweenSteps) || 1);
+      const names = poseOrder(Object.keys(L));
+      if (opts && opts.budget) budget = Math.max(budget, opts.budget);
+      pairs.forEach(function (pr) {
+        const lk = pr[0], p = pr[1], key = lk + ':' + p, Lk = Game.Data.Looks[lk];
+        if (!Lk || Lk.style === 'sheet' || prepared[key]) return;           // 画像の見た目は preload で済んでいる
+        prepared[key] = true;
+        baseLeft[key] = 0; tweenLeft[key] = 0;
+        names.forEach(function (name) {
+          for (let f = 0; f < L[name]; f++) { qMain.push([name, f, p, lk, key]); baseLeft[key]++; }
+        });
+        names.forEach(function (name) {
+          for (let f = 0; f < L[name]; f++) {
+            for (let s = 1; s < Q; s++) {
+              if (L[name] === 1) break;
+              qTween.push([name, f + s / Q, p, lk, key]); tweenLeft[key]++;
+            }
+          }
+        });
+      });
+      schedule();
+    },
+    // 整数のコマがそろっているか(prepare していない自動生成の見た目は、まだ)
+    isReady: function (pairs) {
+      return pairs.every(function (pr) {
+        const Lk = Game.Data.Looks[pr[0]], key = pr[0] + ':' + pr[1];
+        if (!Lk || Lk.style === 'sheet') return true;
+        return !!prepared[key] && baseLeft[key] === 0;
+      });
+    },
+    // 進み具合 { done, total }(整数のコマ)
+    progress: function (pairs) {
+      const L = this.list(), n = Object.keys(L).reduce(function (a, k) { return a + L[k]; }, 0);
+      let done = 0, total = 0;
+      pairs.forEach(function (pr) {
+        const key = pr[0] + ':' + pr[1];
+        if (!prepared[key]) return;
+        total += n; done += n - baseLeft[key];
+      });
+      return { done: done, total: total };
+    },
+    // 選択画面の顔(待機の1コマ目)を、先に描いておく(選択画面を開いた瞬間のカクつきを防ぐ)。タイトルを出したあとに呼ぶ
+    warmPortraits: function () {
+      const self = this;
+      activeLooks(false).forEach(function (lk) {
+        for (let p = 0; p < Game.Data.Looks[lk].palettes.length; p++) qMain.push(['idle', 0, p, lk, null]);
+      });
+      schedule();
     },
     // 画像の見た目で、そのコマに喰らい判定が定義されていればその箱 [[x0,y0,x1,y1],...]、なければ null
     hurtBoxes: function (look, name, frame) {

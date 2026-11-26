@@ -17,6 +17,10 @@
       this.params = params || {};
       this.frame = 0;
       Game.Core.Sound.play('ok');
+      // この画面を見せているあいだに、戦う2人の絵を描き起こしておく(対戦が始まるときに待たせないため)
+      const params2 = this.params, look = function (id) { const c = id && Game.Logic.Character.get(id); return c && c.sprite; };
+      const pairs = [look((params2.chars || [])[0]), look((params2.chars || [])[1])].map(function (lk, i) { return lk ? [lk, i] : null; }).filter(Boolean);
+      if (pairs.length) Game.Data.Sprites.prepare(pairs, { budget: 12 });
     },
 
     update: function () {

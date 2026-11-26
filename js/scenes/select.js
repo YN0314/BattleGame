@@ -64,7 +64,7 @@
           const others = ids.map(function (id, k) { return k; }).filter(function (k) { return k !== self.cursor[0]; });
           const pool = others.length ? others : [0];
           this.cursor[1] = pool[Math.floor(Math.random() * pool.length)];
-          this.locked[1] = true; this.done = 1; this.focus = 0; Snd.play('ok');
+          this.locked[1] = true; this.done = 1; this.focus = 0; Snd.play('ok'); this.prepareFor(1);
         }
         return;
       }
@@ -83,7 +83,7 @@
           }
           if (moved) { Snd.play('move'); self.focus = p; }
           if (pr.punch || pr.start) {
-            self.locked[p] = true; self.focus = p; Snd.play('ok'); Game.Core.Sound.unlock();
+            self.locked[p] = true; self.focus = p; Snd.play('ok'); Game.Core.Sound.unlock(); self.prepareFor(p);
             if (!self.twoPlayers()) self.roll = 36;                 // 1人用:CPUのキャラを決めにいく
           } else if (pr.kick) {
             const anyLocked = self.locked[0] || self.locked[1];
@@ -94,6 +94,12 @@
         }
       });
       if (this.twoPlayers() && this.locked[0] && this.locked[1]) { this.done = 1; Snd.play('ok'); }
+    },
+
+    // 決めたキャラの絵を、先に描き起こしておく(VS 画面・対戦に入るときに待たせないため)
+    prepareFor: function (p) {
+      const id = this.ids()[this.cursor[p]], c = id && Game.Logic.Character.get(id);
+      if (c && c.sprite) Game.Data.Sprites.prepare([[c.sprite, p]], { budget: 8 });
     },
 
     start: function () {
