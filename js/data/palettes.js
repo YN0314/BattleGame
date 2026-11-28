@@ -140,6 +140,9 @@ Game.Data.Looks.imai_v = vecLook(
       a: '#e2c04a', q: '#f4f4f6', x: '#17171d', X: '#0a0a0e', xh: '#4a4b58' })
   ]);
 
+// imai_a:スーツ姿。1Pと2Pで同じシートを使い、画像が読み込めないときは imai_v で補う
+Game.Data.Looks.imai_a = { style: 'sheet', sheet: 'imai_a_sheet', fallback: 'imai_v', palettes: Game.Data.Looks.imai_v.palettes };
+
 // ishii:短く刈った髪(グレーがかった黒、側頭部は刈り上げ)、細い目、落ち着いた表情、あごにうっすら無精ひげ。青と白の細かいプリントの半袖シャツ(襟元を開ける)、カーキの九分丈パンツと濃い色のソックス
 Game.Data.Looks.ishii_v = vecLook(
   { hair: 'shave', blush: 0.25, beard: 'stubble', stubble: 0.3, stubbleMix: 0.5, chinK: 0.35,

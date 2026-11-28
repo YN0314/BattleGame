@@ -55,7 +55,7 @@ Game.Config.characters = {
   imai: {
     name: 'IMAI',
     stage: 'street', tag: 'PHOTO',
-    sprite: 'imai_v',
+    sprite: 'imai_a',
     body: { walkSpeed: 1.5, jumpVelocity: -7.0 },
     normals: {
       standPunch: 'standPunch', standKick: 'standKick',
